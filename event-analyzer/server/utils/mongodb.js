@@ -12,14 +12,15 @@ async function connectToDatabase() {
     return db;
   }
 
+  const mongoUrl = process.env.MONGO_URL;
+  const dbName = process.env.DB_NAME;
+
+  if (!mongoUrl || !dbName) {
+    console.log('[MONGODB] ⚠️ MongoDB not configured (MONGO_URL/DB_NAME missing) - running without database');
+    return null;
+  }
+
   try {
-    const mongoUrl = process.env.MONGO_URL;
-    const dbName = process.env.DB_NAME;
-
-    if (!mongoUrl || !dbName) {
-      throw new Error('MONGO_URL and DB_NAME must be configured in environment variables');
-    }
-
     console.log('[MONGODB] Connecting to MongoDB...');
 
     client = new MongoClient(mongoUrl, {
@@ -37,7 +38,8 @@ async function connectToDatabase() {
     return db;
   } catch (error) {
     console.error('[MONGODB] ❌ Connection error:', error.message);
-    throw error;
+    console.log('[MONGODB] ⚠️ Continuing without database...');
+    return null;
   }
 }
 

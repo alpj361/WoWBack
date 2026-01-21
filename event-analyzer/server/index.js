@@ -36,7 +36,7 @@ app.get('/api/health', async (req, res) => {
     environment: process.env.NODE_ENV || 'development'
   };
 
-  const statusCode = mongoConnected && process.env.OPENAI_API_KEY ? 200 : 503;
+  const statusCode = process.env.OPENAI_API_KEY ? 200 : 503;
 
   res.status(statusCode).json(health);
 });
