@@ -2,16 +2,21 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
-## [1.1.0] - 2026-01-21
+## [1.2.0] - 2026-01-21
+
+### Added
+- `POST /api/auth/validate-code` - Validate invitation codes
+- `POST /api/auth/register` - Create user profile after OAuth
+- `GET /api/auth/me` - Get current user profile
+- `auth.js` routes module
+
+## [1.1.0] - 2026-01-20
 
 ### Added
 - Supabase integration for event storage
 - `POST /api/events` - Create events
 - `GET /api/events` - List events with category filter
 - `GET /api/events/:id` - Get single event
-- `POST /api/auth/validate-code` - Validate invitation codes
-- `POST /api/auth/register` - Create user profile after OAuth
-- `GET /api/auth/me` - Get current user profile
 - `supabase.js` client utility
 
 ### Changed

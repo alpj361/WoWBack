@@ -111,7 +111,7 @@ router.post('/register', async (req, res) => {
             }
         }
 
-        // Upsert profile
+        // Upsert profile - role comes from code's user_type
         const { data: profile, error } = await getSupabase()
             .from('profiles')
             .upsert({
@@ -119,7 +119,7 @@ router.post('/register', async (req, res) => {
                 email,
                 full_name: full_name || null,
                 avatar_url: avatar_url || null,
-                role: 'user',
+                role: codeData.user_type, // Role from invitation code
                 user_type: codeData.user_type,
                 credits: codeData.credits,
                 updated_at: new Date().toISOString()
