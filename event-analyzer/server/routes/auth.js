@@ -88,7 +88,7 @@ router.post('/register', async (req, res) => {
         if (code) {
             const { data: invCode } = await getSupabase()
                 .from('invitation_codes')
-                .select('id, user_type, credits')
+                .select('id, user_type, credits, current_uses')
                 .eq('code', code.toUpperCase())
                 .single();
 
@@ -98,14 +98,14 @@ router.post('/register', async (req, res) => {
                     credits: invCode.credits || 100
                 };
 
-                // Mark code as used
+                // Mark code as used (increment current_uses)
                 await getSupabase()
                     .from('invitation_codes')
                     .update({
                         used: true,
                         used_by: user_id,
                         used_at: new Date().toISOString(),
-                        current_uses: supabase.rpc ? 1 : 1
+                        current_uses: (invCode.current_uses || 0) + 1
                     })
                     .eq('id', invCode.id);
             }
