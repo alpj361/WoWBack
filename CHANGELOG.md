@@ -9,6 +9,9 @@ All notable changes to the WoW Backend will be documented in this file.
 - `POST /api/events` - Create events
 - `GET /api/events` - List events with category filter
 - `GET /api/events/:id` - Get single event
+- `POST /api/auth/validate-code` - Validate invitation codes
+- `POST /api/auth/register` - Create user profile after OAuth
+- `GET /api/auth/me` - Get current user profile
 - `supabase.js` client utility
 
 ### Changed

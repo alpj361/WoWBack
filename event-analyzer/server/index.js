@@ -4,6 +4,7 @@ const cors = require('cors');
 const { initSupabase, isConfigured } = require('./utils/supabase');
 const imageAnalysisRoutes = require('./routes/imageAnalysis');
 const eventsRoutes = require('./routes/events');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -41,6 +42,7 @@ app.get('/api/health', async (req, res) => {
 });
 
 // API Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/events', imageAnalysisRoutes);
 
