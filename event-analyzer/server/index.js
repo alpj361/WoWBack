@@ -1,8 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { connectToDatabase, isConnected } = require('./utils/mongodb');
+const { initSupabase, isConfigured } = require('./utils/supabase');
 const imageAnalysisRoutes = require('./routes/imageAnalysis');
+const eventsRoutes = require('./routes/events');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,34 +25,36 @@ app.use((req, res, next) => {
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
-  const mongoConnected = await isConnected();
-
   const health = {
     status: 'healthy',
     service: 'event-analyzer',
-    mongodb: mongoConnected ? 'connected' : 'disconnected',
+    supabase: isConfigured() ? 'configured' : 'not configured',
     openai: process.env.OPENAI_API_KEY ? 'configured' : 'not configured',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development'
   };
 
-  const statusCode = process.env.OPENAI_API_KEY ? 200 : 503;
+  const statusCode = isConfigured() && process.env.OPENAI_API_KEY ? 200 : 503;
 
   res.status(statusCode).json(health);
 });
 
 // API Routes
+app.use('/api/events', eventsRoutes);
 app.use('/api/events', imageAnalysisRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
     service: 'Event Analyzer API',
-    version: '1.0.0',
-    description: 'Image analysis service for event extraction using OpenAI Vision',
+    version: '1.1.0',
+    description: 'Event management and image analysis service',
     endpoints: {
       health: 'GET /api/health',
+      createEvent: 'POST /api/events',
+      listEvents: 'GET /api/events',
+      getEvent: 'GET /api/events/:id',
       analyzeImage: 'POST /api/events/analyze-image'
     }
   });
@@ -74,15 +77,15 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize database and start server
+// Initialize and start server
 async function startServer() {
   try {
     console.log('==========================================');
     console.log('🚀 Event Analyzer API Starting...');
     console.log('==========================================');
 
-    // Connect to MongoDB
-    await connectToDatabase();
+    // Initialize Supabase
+    initSupabase();
 
     // Start Express server
     app.listen(PORT, '0.0.0.0', () => {
@@ -100,17 +103,13 @@ async function startServer() {
 }
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
+process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server');
-  const { closeConnection } = require('./utils/mongodb');
-  await closeConnection();
   process.exit(0);
 });
 
-process.on('SIGINT', async () => {
+process.on('SIGINT', () => {
   console.log('SIGINT signal received: closing HTTP server');
-  const { closeConnection } = require('./utils/mongodb');
-  await closeConnection();
   process.exit(0);
 });
 
