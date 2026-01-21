@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { analyzeEventImage, validateImageData } = require('../services/eventVision');
-const { getDatabase } = require('../utils/mongodb');
+// MongoDB disabled temporarily - uncomment to re-enable storage
+// const { getDatabase } = require('../utils/mongodb');
 
 /**
  * POST /api/events/analyze-image
@@ -33,7 +34,9 @@ router.post('/analyze-image', async (req, res) => {
     // Analyze image with OpenAI Vision
     const result = await analyzeEventImage(image, title);
 
-    // Save analysis to MongoDB
+    // MongoDB storage disabled temporarily
+    // Uncomment below to save analysis history to MongoDB
+    /*
     try {
       const db = getDatabase();
       const analysisDoc = {
@@ -49,6 +52,7 @@ router.post('/analyze-image', async (req, res) => {
       console.error('[IMAGE_ANALYSIS] ⚠️ MongoDB save error:', dbError.message);
       // Continue even if DB save fails
     }
+    */
 
     // Return success response
     res.json({
