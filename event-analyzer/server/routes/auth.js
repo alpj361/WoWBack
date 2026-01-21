@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { supabase } = require('../utils/supabase');
+const { getSupabase } = require('../utils/supabase');
 
 /**
  * POST /api/auth/validate-code
@@ -18,7 +18,7 @@ router.post('/validate-code', async (req, res) => {
         }
 
         // Check if code exists and is valid
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('invitation_codes')
             .select('id, code, description, user_type, credits, max_uses, current_uses, expires_at')
             .eq('code', code.toUpperCase())
@@ -86,7 +86,7 @@ router.post('/register', async (req, res) => {
         let codeData = { user_type: 'Beta', credits: 100 };
 
         if (code) {
-            const { data: invCode } = await supabase
+            const { data: invCode } = await getSupabase()
                 .from('invitation_codes')
                 .select('id, user_type, credits')
                 .eq('code', code.toUpperCase())
@@ -99,7 +99,7 @@ router.post('/register', async (req, res) => {
                 };
 
                 // Mark code as used
-                await supabase
+                await getSupabase()
                     .from('invitation_codes')
                     .update({
                         used: true,
@@ -112,7 +112,7 @@ router.post('/register', async (req, res) => {
         }
 
         // Upsert profile
-        const { data: profile, error } = await supabase
+        const { data: profile, error } = await getSupabase()
             .from('profiles')
             .upsert({
                 id: user_id,
@@ -164,7 +164,7 @@ router.get('/me', async (req, res) => {
             });
         }
 
-        const { data: profile, error } = await supabase
+        const { data: profile, error } = await getSupabase()
             .from('profiles')
             .select('*')
             .eq('id', user_id)

@@ -44,8 +44,12 @@ function isConfigured() {
     return !!(supabaseUrl && supabaseServiceKey);
 }
 
+// Getter for direct access
+const getClient = () => supabase;
+
 module.exports = {
     initSupabase,
     getSupabase,
-    isConfigured
+    isConfigured,
+    get supabase() { return supabase; }
 };
