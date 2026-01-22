@@ -2,6 +2,12 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.2.1] - 2026-01-21
+
+### Fixed
+- 🐛 **Register Endpoint**: Fixed undefined `supabase` reference in auth.js causing 500 error
+- 🔢 **Code Usage Counter**: Now properly increments `current_uses` field
+
 ## [1.2.0] - 2026-01-21
 
 ### Added
