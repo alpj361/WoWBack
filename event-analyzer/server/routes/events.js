@@ -15,7 +15,7 @@ router.post('/', async (req, res) => {
             });
         }
 
-        const { title, description, category, image, date, time, location } = req.body;
+        const { title, description, category, image, date, time, location, user_id } = req.body;
 
         if (!title || !title.trim()) {
             return res.status(400).json({
@@ -33,7 +33,8 @@ router.post('/', async (req, res) => {
             image: image || null,
             date: date || null,
             time: time || null,
-            location: location?.trim() || null
+            location: location?.trim() || null,
+            user_id: user_id || null
         };
 
         console.log('[EVENTS] Creating event:', eventData.title);
@@ -156,6 +157,102 @@ router.get('/:id', async (req, res) => {
             success: false,
             error: 'Failed to fetch event',
             message: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/events/hosted/:userId
+ * List events hosted by a specific user with attendee counts
+ */
+router.get('/hosted/:userId', async (req, res) => {
+    try {
+        if (!isConfigured()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Database not configured'
+            });
+        }
+
+        const { userId } = req.params;
+        const supabase = getSupabase();
+
+        // Get events where user_id matches
+        const { data: events, error } = await supabase
+            .from('events')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            throw error;
+        }
+
+        // For each event, get the attendee count from saved_events
+        const eventsWithAttendees = await Promise.all(
+            events.map(async (event) => {
+                const { count } = await supabase
+                    .from('saved_events')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('event_id', event.id);
+
+                return { ...event, attendee_count: count || 0 };
+            })
+        );
+
+        res.json({ success: true, events: eventsWithAttendees });
+
+    } catch (error) {
+        console.error('[EVENTS] ❌ Hosted events error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch hosted events'
+        });
+    }
+});
+
+/**
+ * GET /api/events/:eventId/attendees
+ * List users who saved a specific event
+ */
+router.get('/:eventId/attendees', async (req, res) => {
+    try {
+        if (!isConfigured()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Database not configured'
+            });
+        }
+
+        const { eventId } = req.params;
+        const supabase = getSupabase();
+
+        const { data, error } = await supabase
+            .from('saved_events')
+            .select(`
+                id,
+                saved_at,
+                profiles:user_id (
+                    id,
+                    full_name,
+                    email,
+                    avatar_url
+                )
+            `)
+            .eq('event_id', eventId)
+            .order('saved_at', { ascending: false });
+
+        if (error) {
+            throw error;
+        }
+
+        res.json({ success: true, attendees: data });
+
+    } catch (error) {
+        console.error('[EVENTS] ❌ Attendees error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch attendees'
         });
     }
 });

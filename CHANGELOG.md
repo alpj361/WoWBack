@@ -2,6 +2,30 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.3.0] - 2026-01-23
+
+### Added
+- 🔗 **URL Extraction Endpoint**: `POST /api/events/analyze-url`
+  - Accepts Instagram post URLs
+  - Extracts images via ExtractorT (`/instagram/simple`)
+  - Analyzes extracted image with OpenAI Vision API
+  - Returns event details (name, date, time, location, description)
+- 📁 `routes/urlExtraction.js` - New route module for URL-based extraction
+
+### Technical Details
+- Uses ExtractorT at `https://api.standatpd.com` for Instagram scraping
+- 120s timeout for extraction (Instagram can be slow)
+- Validates Instagram URLs before processing
+- Returns `extracted_image_url` for frontend display
+
+### Error Handling
+| Scenario | Response |
+|----------|----------|
+| No URL | 400 - "URL is required" |
+| Non-Instagram URL | 400 - "URL no soportada. Por ahora solo aceptamos Instagram." |
+| No image in post | 400 - "No se encontró imagen en el post de Instagram." |
+| Timeout | 504 - "Tiempo de espera agotado. Intenta de nuevo." |
+
 ## [1.2.1] - 2026-01-21
 
 ### Fixed
