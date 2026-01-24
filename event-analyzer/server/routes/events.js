@@ -115,53 +115,6 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * GET /api/events/:id
- * Get single event by ID
- */
-router.get('/:id', async (req, res) => {
-    try {
-        if (!isConfigured()) {
-            return res.status(503).json({
-                success: false,
-                error: 'Database not configured'
-            });
-        }
-
-        const { id } = req.params;
-        const supabase = getSupabase();
-
-        const { data, error } = await supabase
-            .from('events')
-            .select('*')
-            .eq('id', id)
-            .single();
-
-        if (error) {
-            if (error.code === 'PGRST116') {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Event not found'
-                });
-            }
-            throw error;
-        }
-
-        res.json({
-            success: true,
-            event: data
-        });
-
-    } catch (error) {
-        console.error('[EVENTS] ❌ Error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch event',
-            message: error.message
-        });
-    }
-});
-
-/**
  * GET /api/events/hosted/:userId
  * List events hosted by a specific user with attendee counts
  */
@@ -256,5 +209,54 @@ router.get('/:eventId/attendees', async (req, res) => {
         });
     }
 });
+
+/**
+ * GET /api/events/:id
+ * Get single event by ID
+ */
+router.get('/:id', async (req, res) => {
+    try {
+        if (!isConfigured()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Database not configured'
+            });
+        }
+
+        const { id } = req.params;
+        const supabase = getSupabase();
+
+        const { data, error } = await supabase
+            .from('events')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Event not found'
+                });
+            }
+            throw error;
+        }
+
+        res.json({
+            success: true,
+            event: data
+        });
+
+    } catch (error) {
+        console.error('[EVENTS] ❌ Error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch event',
+            message: error.message
+        });
+    }
+});
+
+
 
 module.exports = router;
