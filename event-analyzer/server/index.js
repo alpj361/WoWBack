@@ -5,6 +5,7 @@ const { initSupabase, isConfigured } = require('./utils/supabase');
 const imageAnalysisRoutes = require('./routes/imageAnalysis');
 const eventsRoutes = require('./routes/events');
 const authRoutes = require('./routes/auth');
+const urlExtractionRoutes = require('./routes/urlExtraction');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -45,6 +46,7 @@ app.get('/api/health', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/events', imageAnalysisRoutes);
+app.use('/api/events', urlExtractionRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -57,7 +59,8 @@ app.get('/', (req, res) => {
       createEvent: 'POST /api/events',
       listEvents: 'GET /api/events',
       getEvent: 'GET /api/events/:id',
-      analyzeImage: 'POST /api/events/analyze-image'
+      analyzeImage: 'POST /api/events/analyze-image',
+      analyzeUrl: 'POST /api/events/analyze-url'
     }
   });
 });
