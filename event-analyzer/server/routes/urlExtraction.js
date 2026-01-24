@@ -39,11 +39,11 @@ router.post('/analyze-url', async (req, res) => {
 
     console.log(`[URL_EXTRACTION] Processing Instagram URL: ${url}`);
 
-    // Extract image via ExtractorT
+    // Extract image via ExtractorT (120s timeout - Instagram extraction can be slow)
     const extractorResponse = await axios.post(
       `${EXTRACTOR_T_URL}/instagram/simple`,
       { url },
-      { timeout: 30000 }
+      { timeout: 120000 }
     );
 
     // Get first media item
