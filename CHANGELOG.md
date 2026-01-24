@@ -2,7 +2,18 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
-## [1.3.0] - 2026-01-23
+## [1.0.5] - 2026-01-24
+
+### Added
+- 🎸 **Host Feature API**: Endpoints to support event hosting
+  - `GET /api/events/hosted/:userId` - Get events hosted by user with attendee count
+  - `GET /api/events/:eventId/attendees` - Get list of users who saved an event
+- 🔄 **Version Synchronization**: Synced version number with Frontend (Wow)
+
+### Fixed
+- 🐛 **Route Order**: Moved specific routes (`/hosted/...`) before generic `/:id` route to prevent 404 shadowing
+
+## [1.0.4] - 2026-01-23
 
 ### Added
 - 🔗 **URL Extraction Endpoint**: `POST /api/events/analyze-url`
@@ -26,13 +37,13 @@ All notable changes to the WoW Backend will be documented in this file.
 | No image in post | 400 - "No se encontró imagen en el post de Instagram." |
 | Timeout | 504 - "Tiempo de espera agotado. Intenta de nuevo." |
 
-## [1.2.1] - 2026-01-21
+## [1.0.3] - 2026-01-21
 
 ### Fixed
 - 🐛 **Register Endpoint**: Fixed undefined `supabase` reference in auth.js causing 500 error
 - 🔢 **Code Usage Counter**: Now properly increments `current_uses` field
 
-## [1.2.0] - 2026-01-21
+## [1.0.2] - 2026-01-21
 
 ### Added
 - `POST /api/auth/validate-code` - Validate invitation codes
@@ -40,7 +51,7 @@ All notable changes to the WoW Backend will be documented in this file.
 - `GET /api/auth/me` - Get current user profile
 - `auth.js` routes module
 
-## [1.1.0] - 2026-01-20
+## [1.0.1] - 2026-01-20
 
 ### Added
 - Supabase integration for event storage

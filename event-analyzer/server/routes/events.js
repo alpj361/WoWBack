@@ -180,32 +180,55 @@ router.get('/:eventId/attendees', async (req, res) => {
         const { eventId } = req.params;
         const supabase = getSupabase();
 
-        const { data, error } = await supabase
+        // First, get all saved_events for this event
+        const { data: savedEvents, error: savedError } = await supabase
             .from('saved_events')
-            .select(`
-                id,
-                saved_at,
-                profiles:user_id (
-                    id,
-                    full_name,
-                    email,
-                    avatar_url
-                )
-            `)
+            .select('id, saved_at, user_id')
             .eq('event_id', eventId)
             .order('saved_at', { ascending: false });
 
-        if (error) {
-            throw error;
+        if (savedError) {
+            console.error('[EVENTS] ❌ Saved events query error:', savedError.message);
+            throw savedError;
         }
 
-        res.json({ success: true, attendees: data });
+        // If no saved events, return empty array
+        if (!savedEvents || savedEvents.length === 0) {
+            return res.json({ success: true, attendees: [] });
+        }
+
+        // Get user IDs
+        const userIds = savedEvents.map(se => se.user_id);
+
+        // Fetch profiles for these users
+        const { data: profiles, error: profilesError } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, avatar_url')
+            .in('id', userIds);
+
+        if (profilesError) {
+            console.error('[EVENTS] ❌ Profiles query error:', profilesError.message);
+            throw profilesError;
+        }
+
+        // Combine the data
+        const attendees = savedEvents.map(savedEvent => {
+            const profile = profiles?.find(p => p.id === savedEvent.user_id);
+            return {
+                id: savedEvent.id,
+                saved_at: savedEvent.saved_at,
+                profiles: profile || null
+            };
+        });
+
+        res.json({ success: true, attendees });
 
     } catch (error) {
         console.error('[EVENTS] ❌ Attendees error:', error.message);
         res.status(500).json({
             success: false,
-            error: 'Failed to fetch attendees'
+            error: 'Failed to fetch attendees',
+            message: error.message
         });
     }
 });
