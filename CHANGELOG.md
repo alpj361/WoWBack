@@ -2,6 +2,46 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.0.6] - 2026-01-24
+
+### Fixed
+- 🐛 **Attendees Endpoint**: Fixed 500 Internal Server Error in `GET /api/events/:eventId/attendees`
+  - **Issue**: Incorrect Supabase query syntax was causing database errors
+  - **Solution**: Rewrote endpoint to use two separate queries:
+    1. First query: Fetch `saved_events` for the specific event
+    2. Second query: Fetch `profiles` for the user IDs from saved_events
+    3. Combine the data before returning
+  - Added comprehensive error handling and logging
+  - Fixed response format to properly include profile information
+
+### Technical Details
+```javascript
+// Before (incorrect - caused 500 error):
+.select('id, saved_at, profiles:user_id (...)')
+
+// After (correct):
+// Query 1: Get saved events
+const { data: savedEvents } = await supabase
+  .from('saved_events')
+  .select('id, saved_at, user_id')
+  .eq('event_id', eventId);
+
+// Query 2: Get profiles for those users
+const { data: profiles } = await supabase
+  .from('profiles')
+  .select('id, full_name, email, avatar_url')
+  .in('id', userIds);
+
+// Query 3: Combine the data
+```
+
+### Error Handling
+| Scenario | Response |
+|----------|----------|
+| No attendees | 200 - Empty array `[]` |
+| Invalid event ID | 200 - Empty array `[]` |
+| Database error | 500 - Error details in logs |
+
 ## [1.0.5] - 2026-01-24
 
 ### Added
