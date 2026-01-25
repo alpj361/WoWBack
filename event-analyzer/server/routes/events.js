@@ -15,9 +15,9 @@ router.post('/', async (req, res) => {
             });
         }
 
-        const { 
+        const {
             title, description, category, image, date, time, location, user_id,
-            price, registration_form_url, bank_account_number, bank_name 
+            price, registration_form_url, bank_account_number, bank_name
         } = req.body;
 
         if (!title || !title.trim()) {
@@ -28,11 +28,13 @@ router.post('/', async (req, res) => {
         }
 
         // Validar que si hay precio, debe haber información bancaria
-        if (price && price > 0) {
+        // Validar que si hay precio, debe haber información bancaria
+        // SOLO si el evento es creado por un usuario específico (host event)
+        if (price && price > 0 && user_id) {
             if (!bank_account_number || !bank_name) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Bank account information is required for paid events'
+                    error: 'Bank account information is required for paid events hosted by users'
                 });
             }
         }
