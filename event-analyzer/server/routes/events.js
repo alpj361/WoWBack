@@ -17,7 +17,8 @@ router.post('/', async (req, res) => {
 
         const {
             title, description, category, image, date, time, location, user_id,
-            price, registration_form_url, bank_account_number, bank_name
+            price, registration_form_url, bank_account_number, bank_name,
+            requires_attendance_check
         } = req.body;
 
         if (!title || !title.trim()) {
@@ -53,7 +54,8 @@ router.post('/', async (req, res) => {
             price: price || null,
             registration_form_url: registration_form_url?.trim() || null,
             bank_account_number: bank_account_number?.trim() || null,
-            bank_name: bank_name?.trim() || null
+            bank_name: bank_name?.trim() || null,
+            requires_attendance_check: requires_attendance_check || false
         };
 
         console.log('[EVENTS] Creating event:', eventData.title);
@@ -607,6 +609,364 @@ router.get('/registrations/user/:userId', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to fetch user registrations',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * POST /api/events/:eventId/scan-attendance
+ * Scan a user's QR code to mark attendance at an event
+ * 
+ * Requirements:
+ * - Authenticated user must be the event host
+ * - scannedUserId must be confirmed for the event (saved_event or approved registration)
+ * - Event must have requires_attendance_check = true
+ */
+router.post('/:eventId/scan-attendance', async (req, res) => {
+    try {
+        if (!isConfigured()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Database not configured'
+            });
+        }
+
+        const { eventId } = req.params;
+        const { scanned_user_id } = req.body;
+
+        // For now, we'll get host_user_id from body (in production, use auth middleware)
+        const { host_user_id } = req.body;
+
+        if (!scanned_user_id) {
+            return res.status(400).json({
+                success: false,
+                error: 'Scanned user ID is required'
+            });
+        }
+
+        if (!host_user_id) {
+            return res.status(400).json({
+                success: false,
+                error: 'Host user ID is required'
+            });
+        }
+
+        const supabase = getSupabase();
+
+        // 1. Verify the authenticated user is the host of this event
+        const { data: event, error: eventError } = await supabase
+            .from('events')
+            .select('*')
+            .eq('id', eventId)
+            .single();
+
+        if (eventError || !event) {
+            return res.status(404).json({
+                success: false,
+                error: 'Event not found'
+            });
+        }
+
+        if (event.user_id !== host_user_id) {
+            return res.status(403).json({
+                success: false,
+                error: 'Only the event host can scan attendance'
+            });
+        }
+
+        // 2. Verify the event requires attendance check
+        if (!event.requires_attendance_check) {
+            return res.status(400).json({
+                success: false,
+                error: 'This event does not require attendance tracking'
+            });
+        }
+
+        // 3. Check if user is confirmed for this event (saved_event or approved registration)
+        const { data: savedEvent } = await supabase
+            .from('saved_events')
+            .select('*')
+            .eq('event_id', eventId)
+            .eq('user_id', scanned_user_id)
+            .maybeSingle();
+
+        const { data: registration } = await supabase
+            .from('event_registrations')
+            .select('*')
+            .eq('event_id', eventId)
+            .eq('user_id', scanned_user_id)
+            .eq('status', 'approved')
+            .maybeSingle();
+
+        const isConfirmed = savedEvent || registration;
+
+        if (!isConfirmed) {
+            return res.status(400).json({
+                success: false,
+                error: 'User is not confirmed for this event'
+            });
+        }
+
+        // 4. Check if already attended
+        const { data: existingAttendance } = await supabase
+            .from('attended_events')
+            .select('*')
+            .eq('event_id', eventId)
+            .eq('user_id', scanned_user_id)
+            .maybeSingle();
+
+        if (existingAttendance) {
+            // Update existing attendance record
+            const { data, error } = await supabase
+                .from('attended_events')
+                .update({
+                    scanned_by_host: true,
+                    scanned_at: new Date().toISOString(),
+                    scanned_by_user_id: host_user_id
+                })
+                .eq('id', existingAttendance.id)
+                .select()
+                .single();
+
+            if (error) {
+                console.error('[EVENTS] ❌ Update attendance error:', error.message);
+                throw error;
+            }
+
+            console.log('[EVENTS] ✅ Attendance updated for user:', scanned_user_id);
+
+            return res.json({
+                success: true,
+                message: 'Attendance updated successfully',
+                attendance: data
+            });
+        } else {
+            // Create new attendance record
+            const { data, error } = await supabase
+                .from('attended_events')
+                .insert([{
+                    event_id: eventId,
+                    user_id: scanned_user_id,
+                    scanned_by_host: true,
+                    scanned_at: new Date().toISOString(),
+                    scanned_by_user_id: host_user_id
+                }])
+                .select()
+                .single();
+
+            if (error) {
+                console.error('[EVENTS] ❌ Insert attendance error:', error.message);
+                throw error;
+            }
+
+            console.log('[EVENTS] ✅ Attendance created for user:', scanned_user_id);
+
+            return res.status(201).json({
+                success: true,
+                message: 'Attendance recorded successfully',
+                attendance: data
+            });
+        }
+
+    } catch (error) {
+        console.error('[EVENTS] ❌ Scan attendance error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to record attendance',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/events/:eventId/attendance-list
+ * Get attendance list for an event (host only)
+ * 
+ * Returns list of all users who are confirmed for the event with their attendance status
+ */
+router.get('/:eventId/attendance-list', async (req, res) => {
+    try {
+        if (!isConfigured()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Database not configured'
+            });
+        }
+
+        const { eventId } = req.params;
+        const supabase = getSupabase();
+
+        // Get all users who saved the event
+        const { data: savedEvents, error: savedError } = await supabase
+            .from('saved_events')
+            .select('user_id')
+            .eq('event_id', eventId);
+
+        if (savedError) {
+            console.error('[EVENTS] ❌ Saved events error:', savedError.message);
+            throw savedError;
+        }
+
+        // Get all approved registrations
+        const { data: registrations, error: regError } = await supabase
+            .from('event_registrations')
+            .select('user_id, status')
+            .eq('event_id', eventId);
+
+        if (regError) {
+            console.error('[EVENTS] ❌ Registrations error:', regError.message);
+            throw regError;
+        }
+
+        // Combine all unique user IDs
+        const savedUserIds = savedEvents?.map(se => se.user_id) || [];
+        const approvedRegUserIds = registrations?.filter(r => r.status === 'approved').map(r => r.user_id) || [];
+        const allUserIds = [...new Set([...savedUserIds, ...approvedRegUserIds])];
+
+        if (allUserIds.length === 0) {
+            return res.json({
+                success: true,
+                attendees: []
+            });
+        }
+
+        // Get user profiles
+        const { data: profiles, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, avatar_url')
+            .in('id', allUserIds);
+
+        if (profileError) {
+            console.error('[EVENTS] ❌ Profiles error:', profileError.message);
+            throw profileError;
+        }
+
+        // Get attendance records
+        const { data: attendedEvents, error: attendedError } = await supabase
+            .from('attended_events')
+            .select('user_id, scanned_by_host, scanned_at')
+            .eq('event_id', eventId)
+            .in('user_id', allUserIds);
+
+        if (attendedError) {
+            console.error('[EVENTS] ❌ Attended events error:', attendedError.message);
+            throw attendedError;
+        }
+
+        // Build attendance list
+        const attendees = allUserIds.map(userId => {
+            const profile = profiles?.find(p => p.id === userId);
+            const attendance = attendedEvents?.find(ae => ae.user_id === userId);
+            const registration = registrations?.find(r => r.user_id === userId);
+            const isSaved = savedUserIds.includes(userId);
+
+            return {
+                user_id: userId,
+                user_name: profile?.full_name || null,
+                user_email: profile?.email || null,
+                user_avatar: profile?.avatar_url || null,
+                confirmed: isSaved || (registration?.status === 'approved'),
+                attended: !!attendance,
+                scanned_by_host: attendance?.scanned_by_host || false,
+                scanned_at: attendance?.scanned_at || null,
+                registration_status: registration?.status || null
+            };
+        });
+
+        res.json({
+            success: true,
+            attendees
+        });
+
+    } catch (error) {
+        console.error('[EVENTS] ❌ Attendance list error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch attendance list',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * PATCH /api/events/:eventId/attendance-requirement
+ * Update attendance requirement for an event (host only)
+ */
+router.patch('/:eventId/attendance-requirement', async (req, res) => {
+    try {
+        if (!isConfigured()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Database not configured'
+            });
+        }
+
+        const { eventId } = req.params;
+        const { requires_attendance_check, user_id } = req.body;
+
+        if (typeof requires_attendance_check !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                error: 'requires_attendance_check must be a boolean'
+            });
+        }
+
+        if (!user_id) {
+            return res.status(400).json({
+                success: false,
+                error: 'User ID is required'
+            });
+        }
+
+        const supabase = getSupabase();
+
+        // Verify user is the host
+        const { data: event, error: eventError } = await supabase
+            .from('events')
+            .select('user_id')
+            .eq('id', eventId)
+            .single();
+
+        if (eventError || !event) {
+            return res.status(404).json({
+                success: false,
+                error: 'Event not found'
+            });
+        }
+
+        if (event.user_id !== user_id) {
+            return res.status(403).json({
+                success: false,
+                error: 'Only the event host can update attendance requirements'
+            });
+        }
+
+        // Update the event
+        const { data, error } = await supabase
+            .from('events')
+            .update({ requires_attendance_check })
+            .eq('id', eventId)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('[EVENTS] ❌ Update error:', error.message);
+            throw error;
+        }
+
+        console.log('[EVENTS] ✅ Attendance requirement updated for event:', eventId);
+
+        res.json({
+            success: true,
+            event: data
+        });
+
+    } catch (error) {
+        console.error('[EVENTS] ❌ Update attendance requirement error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to update attendance requirement',
             message: error.message
         });
     }

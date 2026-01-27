@@ -2,6 +2,66 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.0.7] - 2026-01-27
+
+### Added
+- 🎯 **Attendance Tracking System**: Complete QR-based attendance tracking for events
+  - `POST /api/events/:eventId/scan-attendance` - Scan user QR code to mark attendance
+  - `GET /api/events/:eventId/attendance-list` - Get attendance list with status for all confirmed users
+  - `PATCH /api/events/:eventId/attendance-requirement` - Toggle attendance tracking for events
+  - Added `requires_attendance_check` field to event creation endpoint
+
+### Features
+- **QR Scan Validation**: 
+  - Verifies host ownership before allowing scans
+  - Ensures event has attendance tracking enabled
+  - Confirms user is registered/approved for event
+  - Prevents duplicate attendance (updates existing records)
+  
+- **Attendance List**:
+  - Shows all confirmed users (saved + approved registrations)
+  - Includes attendance status (attended, scanned_by_host, scanned_at)
+  - Returns user profile data (name, email, avatar)
+  - Displays registration status for each user
+
+- **Security**:
+  - Host-only access validation for all attendance endpoints
+  - Event ownership verification before scans
+  - Confirmation status checks (saved_events + approved registrations)
+
+### Technical Details
+```javascript
+// Scan Attendance Flow:
+1. Verify host owns event
+2. Check event requires_attendance_check = true
+3. Confirm user is saved/approved
+4. Create or update attendance record with:
+   - scanned_by_host: true
+   - scanned_at: timestamp
+   - scanned_by_user_id: host's UUID
+```
+
+### Database Changes
+- Utilizes new `user_qr_codes` table for QR code data
+- Updates `attended_events` with scan tracking fields:
+  - `scanned_by_host` (boolean)
+  - `scanned_at` (timestamptz)
+  - `scanned_by_user_id` (uuid reference)
+
+### Documentation
+- Added `/docs/API_ATTENDANCE_ENDPOINTS.md` with complete API reference
+- Includes request/response examples, error codes, and integration flow
+- See `/docs/PLAN_ATTENDANCE_TRACKING.md` for architecture details
+
+### Error Handling
+| Scenario | Response |
+|----------|----------|
+| Not event host | 403 - "Only the event host can scan attendance" |
+| No attendance tracking | 400 - "This event does not require attendance tracking" |
+| User not confirmed | 400 - "User is not confirmed for this event" |
+| Event not found | 404 - "Event not found" |
+| Missing parameters | 400 - Parameter-specific error message |
+
 ## [1.0.6] - 2026-01-24
 
 ### Fixed
