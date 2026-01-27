@@ -683,7 +683,7 @@ router.post('/:eventId/scan-attendance', async (req, res) => {
             });
         }
 
-        // 3. Check if user is confirmed for this event (saved_event or approved registration)
+        // 3. Check if user is in the system for this event
         const { data: savedEvent } = await supabase
             .from('saved_events')
             .select('*')
@@ -696,15 +696,31 @@ router.post('/:eventId/scan-attendance', async (req, res) => {
             .select('*')
             .eq('event_id', eventId)
             .eq('user_id', scanned_user_id)
-            .eq('status', 'approved')
             .maybeSingle();
 
-        const isConfirmed = savedEvent || registration;
+        // Case 1: User doesn't exist in saved_events or registrations
+        if (!savedEvent && !registration) {
+            return res.status(400).json({
+                success: false,
+                error: 'Usuario no existe'
+            });
+        }
+
+        // Case 2: User has registration but not approved (not paid)
+        if (registration && registration.status !== 'approved' && !savedEvent) {
+            return res.status(400).json({
+                success: false,
+                error: 'No pagado'
+            });
+        }
+
+        // Case 3: User is confirmed (saved or approved)
+        const isConfirmed = savedEvent || (registration && registration.status === 'approved');
 
         if (!isConfirmed) {
             return res.status(400).json({
                 success: false,
-                error: 'User is not confirmed for this event'
+                error: 'Usuario no confirmado'
             });
         }
 
@@ -808,10 +824,10 @@ router.get('/:eventId/attendance-list', async (req, res) => {
             throw savedError;
         }
 
-        // Get all approved registrations
+        // Get all registrations (approved and pending) with payment receipts
         const { data: registrations, error: regError } = await supabase
             .from('event_registrations')
-            .select('user_id, status')
+            .select('user_id, status, payment_receipt_url')
             .eq('event_id', eventId);
 
         if (regError) {
