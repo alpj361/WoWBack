@@ -813,6 +813,20 @@ router.get('/:eventId/attendance-list', async (req, res) => {
         const { eventId } = req.params;
         const supabase = getSupabase();
 
+        // Get event to check if it has payments/registration
+        const { data: event, error: eventError } = await supabase
+            .from('events')
+            .select('price, registration_form_url')
+            .eq('id', eventId)
+            .single();
+
+        if (eventError) {
+            console.error('[EVENTS] ❌ Event error:', eventError.message);
+            throw eventError;
+        }
+
+        const hasPayments = (event.price && parseFloat(event.price) > 0) || !!event.registration_form_url;
+
         // Get all users who saved the event
         const { data: savedEvents, error: savedError } = await supabase
             .from('saved_events')
@@ -835,10 +849,19 @@ router.get('/:eventId/attendance-list', async (req, res) => {
             throw regError;
         }
 
-        // Combine all unique user IDs
+        // If event has payments, ONLY consider approved registrations as confirmed
+        // If event is free, consider saved_events as confirmed
         const savedUserIds = savedEvents?.map(se => se.user_id) || [];
         const approvedRegUserIds = registrations?.filter(r => r.status === 'approved').map(r => r.user_id) || [];
-        const allUserIds = [...new Set([...savedUserIds, ...approvedRegUserIds])];
+        
+        // For events with payments: only approved registrations
+        // For free events: saved users + approved registrations
+        const confirmedUserIds = hasPayments 
+            ? approvedRegUserIds 
+            : [...new Set([...savedUserIds, ...approvedRegUserIds])];
+
+        // Include all users who have any interaction (for showing pending/rejected in UI if needed)
+        const allUserIds = [...new Set([...savedUserIds, ...registrations?.map(r => r.user_id) || []])];
 
         if (allUserIds.length === 0) {
             return res.json({
@@ -870,19 +893,18 @@ router.get('/:eventId/attendance-list', async (req, res) => {
             throw attendedError;
         }
 
-        // Build attendance list
-        const attendees = allUserIds.map(userId => {
+        // Build attendance list - only include confirmed users
+        const attendees = confirmedUserIds.map(userId => {
             const profile = profiles?.find(p => p.id === userId);
             const attendance = attendedEvents?.find(ae => ae.user_id === userId);
             const registration = registrations?.find(r => r.user_id === userId);
-            const isSaved = savedUserIds.includes(userId);
 
             return {
                 user_id: userId,
                 user_name: profile?.full_name || null,
                 user_email: profile?.email || null,
                 user_avatar: profile?.avatar_url || null,
-                confirmed: isSaved || (registration?.status === 'approved'),
+                confirmed: true, // All users in this list are confirmed
                 attended: !!attendance,
                 scanned_by_host: attendance?.scanned_by_host || false,
                 scanned_at: attendance?.scanned_at || null,
