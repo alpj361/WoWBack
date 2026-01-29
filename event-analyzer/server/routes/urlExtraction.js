@@ -69,13 +69,17 @@ router.post('/analyze-url', async (req, res) => {
       postMetadata?.description || 'Event Post'
     );
 
+    // Return response in same format as /analyze-image
     res.json({
       success: true,
       analysis: analysisResult.analysis,
-      source_url: url,
-      platform: 'instagram',
-      extracted_image_url: imageUrl,
-      post_metadata: postMetadata
+      metadata: {
+        ...analysisResult.metadata,
+        source_url: url,
+        platform: 'instagram',
+        extracted_image_url: imageUrl,
+        post_metadata: postMetadata
+      }
     });
 
   } catch (error) {
