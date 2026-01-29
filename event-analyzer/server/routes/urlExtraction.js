@@ -63,9 +63,29 @@ router.post('/analyze-url', async (req, res) => {
 
     console.log(`[URL_EXTRACTION] Extracted image: ${imageUrl}`);
 
-    // Analyze extracted image with Vision API
+    // Download image and convert to base64
+    console.log(`[URL_EXTRACTION] Downloading image from Instagram CDN...`);
+    const imageResponse = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+
+    // Convert to base64
+    const base64Image = Buffer.from(imageResponse.data, 'binary').toString('base64');
+    const mimeType = imageResponse.headers['content-type'] || 'image/jpeg';
+    const base64DataUrl = `data:${mimeType};base64,${base64Image}`;
+    
+    console.log(`[URL_EXTRACTION] Image downloaded successfully (${(base64Image.length / 1024).toFixed(2)} KB)`);
+
+    // Analyze image with Vision API using base64
     const analysisResult = await analyzeEventImage(
-      imageUrl,
+      base64DataUrl,
       postMetadata?.description || 'Event Post'
     );
 
