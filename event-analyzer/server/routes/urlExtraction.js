@@ -39,65 +39,110 @@ router.post('/analyze-url', async (req, res) => {
 
     console.log(`[URL_EXTRACTION] Processing Instagram URL: ${url}`);
 
-    // Extract image via ExtractorT (120s timeout - Instagram extraction can be slow)
+    // Extract images via ExtractorT (120s timeout - Instagram extraction can be slow)
     const extractorResponse = await axios.post(
       `${EXTRACTOR_T_URL}/instagram/simple`,
       { url },
       { timeout: 120000 }
     );
 
-    // Get first media item
-    const media = extractorResponse.data.media?.[0];
-    if (!media?.url) {
+    // Get all media items (supports carousels)
+    const mediaItems = extractorResponse.data.media || [];
+    if (mediaItems.length === 0) {
       return res.status(400).json({
         success: false,
         error: 'No se encontró imagen en el post de Instagram.'
       });
     }
 
-    const imageUrl = media.url;
     const postMetadata = {
       author: extractorResponse.data.author,
       description: extractorResponse.data.description
     };
 
-    console.log(`[URL_EXTRACTION] Extracted image: ${imageUrl}`);
+    console.log(`[URL_EXTRACTION] Found ${mediaItems.length} image(s) in post`);
 
-    // Download image and convert to base64
-    console.log(`[URL_EXTRACTION] Downloading image from Instagram CDN...`);
-    const imageResponse = await axios.get(imageUrl, {
-      responseType: 'arraybuffer',
-      timeout: 30000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Accept-Language': 'en-US,en;q=0.9'
-      }
-    });
-
-    // Convert to base64
-    const base64Image = Buffer.from(imageResponse.data, 'binary').toString('base64');
-    const mimeType = imageResponse.headers['content-type'] || 'image/jpeg';
-    const base64DataUrl = `data:${mimeType};base64,${base64Image}`;
+    // Process all images in carousel
+    const events = [];
     
-    console.log(`[URL_EXTRACTION] Image downloaded successfully (${(base64Image.length / 1024).toFixed(2)} KB)`);
+    for (let i = 0; i < mediaItems.length; i++) {
+      const media = mediaItems[i];
+      if (!media?.url) continue;
 
-    // Analyze image with Vision API using base64
-    const analysisResult = await analyzeEventImage(
-      base64DataUrl,
-      postMetadata?.description || 'Event Post'
-    );
+      try {
+        console.log(`[URL_EXTRACTION] Processing image ${i + 1}/${mediaItems.length}: ${media.url}`);
 
-    // Return response in same format as /analyze-image
+        // Download image and convert to base64
+        const imageResponse = await axios.get(media.url, {
+          responseType: 'arraybuffer',
+          timeout: 30000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Language': 'en-US,en;q=0.9'
+          }
+        });
+
+        // Convert to base64
+        const base64Image = Buffer.from(imageResponse.data, 'binary').toString('base64');
+        const mimeType = imageResponse.headers['content-type'] || 'image/jpeg';
+        const base64DataUrl = `data:${mimeType};base64,${base64Image}`;
+        
+        console.log(`[URL_EXTRACTION] Image ${i + 1} downloaded (${(base64Image.length / 1024).toFixed(2)} KB)`);
+
+        // Analyze image with Vision API
+        const analysisResult = await analyzeEventImage(
+          base64DataUrl,
+          postMetadata?.description || 'Event Post'
+        );
+
+        // Check if this image contains valid event data
+        const analysis = analysisResult.analysis;
+        const hasEventData = analysis.event_name && 
+                            analysis.event_name !== 'No especificado' &&
+                            analysis.event_name !== 'N/A' &&
+                            !analysis.event_name.toLowerCase().includes('portada') &&
+                            !analysis.event_name.toLowerCase().includes('título') &&
+                            !analysis.event_name.toLowerCase().includes('cover');
+
+        if (hasEventData) {
+          events.push({
+            analysis: analysis,
+            metadata: {
+              ...analysisResult.metadata,
+              image_index: i,
+              extracted_image_url: media.url
+            }
+          });
+          console.log(`[URL_EXTRACTION] ✅ Image ${i + 1} contains valid event data: "${analysis.event_name}"`);
+        } else {
+          console.log(`[URL_EXTRACTION] ⏭️  Image ${i + 1} skipped (no event data or cover/title)`);
+        }
+
+      } catch (imageError) {
+        console.error(`[URL_EXTRACTION] Error processing image ${i + 1}:`, imageError.message);
+        // Continue with next image
+      }
+    }
+
+    // Return results
+    if (events.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No se encontraron eventos válidos en las imágenes.'
+      });
+    }
+
+    // Return response
     res.json({
       success: true,
-      analysis: analysisResult.analysis,
+      events: events,
       metadata: {
-        ...analysisResult.metadata,
         source_url: url,
         platform: 'instagram',
-        extracted_image_url: imageUrl,
+        total_images: mediaItems.length,
+        valid_events: events.length,
         post_metadata: postMetadata
       }
     });
