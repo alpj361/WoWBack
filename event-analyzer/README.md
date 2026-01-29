@@ -53,6 +53,77 @@ Analyze an event image and extract structured data.
 }
 ```
 
+### POST /api/events/analyze-url
+
+Extract image from Instagram post and analyze it for event details.
+
+**Request:**
+```json
+{
+  "url": "https://www.instagram.com/p/DTxujr3jvym/"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "analysis": {
+    "event_name": "Naturaleza en Presencia",
+    "date": "2026-03-25",
+    "time": "18:00",
+    "description": "Open call para artistas latinoamericanos",
+    "location": "Nueva York",
+    "confidence": "high"
+  },
+  "metadata": {
+    "model": "gpt-4o-mini",
+    "tokens_used": 1500,
+    "source_url": "https://www.instagram.com/p/DTxujr3jvym/",
+    "platform": "instagram",
+    "extracted_image_url": "https://scontent.cdninstagram.com/...",
+    "post_metadata": {
+      "author": "LatinIsmo Art & Education",
+      "description": "🌿 Naturaleza en Presencia..."
+    }
+  }
+}
+```
+
+**Notes:**
+- Currently supports Instagram URLs only
+- Uses ExtractorT service (`https://api.standatpd.com/instagram/simple`) for image extraction
+- Downloads image and converts to base64 before sending to OpenAI Vision
+- Same analysis flow as `/analyze-image` endpoint
+- Timeout: 120 seconds (Instagram extraction can be slow)
+
+**Error Responses:**
+```json
+// Missing URL
+{
+  "success": false,
+  "error": "URL is required"
+}
+
+// Non-Instagram URL
+{
+  "success": false,
+  "error": "URL no soportada. Por ahora solo aceptamos Instagram."
+}
+
+// No image found in post
+{
+  "success": false,
+  "error": "No se encontró imagen en el post de Instagram."
+}
+
+// Timeout
+{
+  "success": false,
+  "error": "Tiempo de espera agotado. Intenta de nuevo."
+}
+```
+
 ### GET /api/health
 
 Health check endpoint.

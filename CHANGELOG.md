@@ -2,6 +2,45 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.0.8] - 2026-01-29
+
+### Fixed
+- 🐛 **URL Extraction - Instagram CDN Access**: Fixed OpenAI Vision API unable to download Instagram images
+  - **Issue**: OpenAI cannot directly access `scontent.cdninstagram.com` URLs (returns 400 error)
+  - **Solution**: Download image in backend and convert to base64 before sending to Vision API
+  - Added axios download with browser-like headers to bypass Instagram CDN restrictions
+  - Converts image to base64 data URL (same as `/analyze-image` endpoint)
+  - Now uses identical flow for both image upload and URL extraction
+
+### Technical Details
+```javascript
+// Download flow:
+1. ExtractorT provides Instagram image URL
+2. Backend downloads with axios + browser headers
+3. Converts arraybuffer to base64
+4. Creates data URL: data:image/jpeg;base64,{base64}
+5. Sends data URL to OpenAI Vision API
+6. Returns structured event data + metadata
+```
+
+### Changed
+- Updated `urlExtraction.js` to download and convert images to base64
+- Response format now matches `/analyze-image` endpoint:
+  ```json
+  {
+    "success": true,
+    "analysis": { event_name, date, time, location, ... },
+    "metadata": {
+      "model": "gpt-4o-mini",
+      "tokens_used": 1500,
+      "source_url": "https://www.instagram.com/...",
+      "platform": "instagram",
+      "extracted_image_url": "https://scontent.cdninstagram.com/...",
+      "post_metadata": { author, description }
+    }
+  }
+  ```
+
 ## [1.0.7] - 2026-01-27
 
 ### Added
