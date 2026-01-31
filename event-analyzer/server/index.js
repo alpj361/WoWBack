@@ -6,6 +6,7 @@ const imageAnalysisRoutes = require('./routes/imageAnalysis');
 const eventsRoutes = require('./routes/events');
 const authRoutes = require('./routes/auth');
 const urlExtractionRoutes = require('./routes/urlExtraction');
+const whatsappFlyersRoutes = require('./routes/whatsappFlyers');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -47,6 +48,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/events', imageAnalysisRoutes);
 app.use('/api/events', urlExtractionRoutes);
+app.use('/api/whatsapp', whatsappFlyersRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
