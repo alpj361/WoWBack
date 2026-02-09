@@ -2,6 +2,38 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.0.10] - 2026-02-09
+
+### Added
+- 🖼️ **Carousel Image Support**: URL extraction now returns all images from Instagram carousels
+  - New `extracted_images` array in response (only present when carousel has 2+ images)
+  - Frontend can display image selector for user choice
+  - Falls back to returning images even if no event analysis detected
+  - Added `is_reel` flag to indicate if content is a reel
+
+### Changed
+- 📊 **Simplified Response Format**: Streamlined `/api/events/analyze-url` response
+  - Now returns single flat structure instead of nested `events` array
+  - Compatible with existing frontend expectations
+  - Includes `extracted_image_url` (best/first image) + `extracted_images` (all images)
+
+### Technical Details
+```javascript
+// New response format:
+{
+  success: true,
+  source_url: "https://instagram.com/p/...",
+  platform: "instagram",
+  extracted_image_url: "https://...",      // First/best image
+  extracted_images: ["https://...", ...],  // All images (if carousel)
+  is_reel: false,
+  analysis: { event_name, date, time, ... },
+  post_metadata: { author, description }
+}
+```
+
+---
+
 ## [1.0.9] - 2026-01-30
 
 ### Added
