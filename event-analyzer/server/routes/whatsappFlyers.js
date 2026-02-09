@@ -4,6 +4,192 @@ const fetch = require('node-fetch');
 const FormData = require('form-data');
 const { getSupabase } = require('../utils/supabase');
 
+// ExtractorT API configuration
+const EXTRACTOR_API_URL = process.env.EXTRACTOR_API_URL || 'https://api.standatpd.com';
+
+// Regex to detect Instagram URLs
+const INSTAGRAM_URL_REGEX = /https?:\/\/(?:www\.)?instagram\.com\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)\/?/gi;
+
+/**
+ * Extract Instagram URLs from text
+ */
+function extractInstagramUrls(text) {
+  const matches = text.match(INSTAGRAM_URL_REGEX);
+  return matches || [];
+}
+
+/**
+ * Send a text message to user via WhatsApp
+ */
+async function sendWhatsAppText(to, text) {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+
+  if (!phoneNumberId || !accessToken) {
+    console.error('❌ WhatsApp credentials not configured');
+    return false;
+  }
+
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: to,
+          type: 'text',
+          text: { body: text }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('❌ Failed to send WhatsApp text:', error);
+      return false;
+    }
+
+    console.log(`✅ Text message sent to ${to}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error sending WhatsApp text:', error);
+    return false;
+  }
+}
+
+/**
+ * Send an image to user via WhatsApp (using image URL)
+ */
+async function sendWhatsAppImage(to, imageUrl, caption = null) {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+
+  if (!phoneNumberId || !accessToken) {
+    console.error('❌ WhatsApp credentials not configured');
+    return false;
+  }
+
+  try {
+    const messageBody = {
+      messaging_product: 'whatsapp',
+      to: to,
+      type: 'image',
+      image: { link: imageUrl }
+    };
+
+    if (caption) {
+      messageBody.image.caption = caption;
+    }
+
+    const response = await fetch(
+      `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(messageBody)
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('❌ Failed to send WhatsApp image:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('❌ Error sending WhatsApp image:', error);
+    return false;
+  }
+}
+
+/**
+ * Process a link message - extract images and send back to user
+ */
+async function processLinkMessage(from, url, messageId) {
+  console.log(`🔗 Processing link from ${from}: ${url}`);
+
+  try {
+    // Step 1: Call ExtractorT API
+    console.log('📥 Calling ExtractorT API...');
+    const extractorResponse = await fetch(`${EXTRACTOR_API_URL}/instagram/simple`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url })
+    });
+
+    if (!extractorResponse.ok) {
+      throw new Error(`ExtractorT API error: ${extractorResponse.statusText}`);
+    }
+
+    const extractorData = await extractorResponse.json();
+
+    if (!extractorData.success || !extractorData.media || extractorData.media.length === 0) {
+      await sendWhatsAppText(from, '❌ No se encontraron imágenes en ese link.');
+      return { success: false, error: 'No media found' };
+    }
+
+    const mediaCount = extractorData.media.length;
+    console.log(`✅ ExtractorT found ${mediaCount} images`);
+
+    // Step 2: Notify user
+    await sendWhatsAppText(from, `📸 Encontré ${mediaCount} imagen${mediaCount > 1 ? 'es' : ''}, enviando...`);
+
+    // Step 3: Send each image (with rate limiting)
+    let sentCount = 0;
+    const maxImages = 10; // Limit to avoid spam/rate limits
+
+    for (let i = 0; i < Math.min(mediaCount, maxImages); i++) {
+      const media = extractorData.media[i];
+      if (media.type === 'image' && media.url) {
+        const caption = i === 0 ? `${extractorData.author || ''} (${i + 1}/${Math.min(mediaCount, maxImages)})`.trim() : `(${i + 1}/${Math.min(mediaCount, maxImages)})`;
+        const sent = await sendWhatsAppImage(from, media.url, caption);
+        if (sent) sentCount++;
+
+        // Rate limit: wait 1.5 seconds between images
+        if (i < Math.min(mediaCount, maxImages) - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
+    }
+
+    console.log(`📤 Sent ${sentCount}/${mediaCount} images to ${from}`);
+
+    // Step 4: Optionally save to whatsapp_flyers table
+    const supabase = getSupabase();
+    for (const media of extractorData.media) {
+      if (media.type === 'image' && media.url) {
+        await supabase
+          .from('whatsapp_flyers')
+          .insert({
+            flyer: media.url,
+            status: 'pending',
+            saved: false
+          });
+      }
+    }
+
+    if (mediaCount > maxImages) {
+      await sendWhatsAppText(from, `ℹ️ Solo envié las primeras ${maxImages} imágenes de ${mediaCount} disponibles.`);
+    }
+
+    return { success: true, sentCount, totalCount: mediaCount };
+
+  } catch (error) {
+    console.error('❌ Error processing link:', error);
+    await sendWhatsAppText(from, '❌ Hubo un error procesando el link. Intenta de nuevo.');
+    return { success: false, error: error.message };
+  }
+}
+
 /**
  * WhatsApp Webhook - Receives messages from WhatsApp Business API
  * POST /api/whatsapp/webhook
@@ -26,10 +212,35 @@ router.post('/webhook', async (req, res) => {
 
     console.log(`📨 Message type: ${messageType}`);
 
-    // Only process image messages
+    // Handle text messages with Instagram links
+    if (messageType === 'text') {
+      const textBody = message.text?.body || '';
+      const instagramUrls = extractInstagramUrls(textBody);
+
+      if (instagramUrls.length > 0) {
+        console.log(`🔗 Found ${instagramUrls.length} Instagram URL(s) in message`);
+
+        // Process the first Instagram URL found
+        const from = message.from;
+        const messageId = message.id;
+
+        const result = await processLinkMessage(from, instagramUrls[0], messageId);
+
+        return res.status(200).json({
+          success: true,
+          message: 'Link processed',
+          result: result
+        });
+      } else {
+        console.log('⏭️ Text message without Instagram links, skipping');
+        return res.status(200).json({ success: true, message: 'No Instagram links found' });
+      }
+    }
+
+    // Handle image messages (existing logic)
     if (messageType !== 'image') {
-      console.log('⏭️ Skipping non-image message');
-      return res.status(200).json({ success: true, message: 'Not an image' });
+      console.log('⏭️ Skipping unsupported message type');
+      return res.status(200).json({ success: true, message: 'Unsupported message type' });
     }
 
     const imageUrl = message.image.url;

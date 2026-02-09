@@ -91,6 +91,7 @@ router.post('/', async (req, res) => {
 /**
  * GET /api/events
  * List all events with optional category filter
+ * Only shows events that haven't passed yet (future events or events without date)
  */
 router.get('/', async (req, res) => {
     try {
@@ -103,6 +104,11 @@ router.get('/', async (req, res) => {
 
         const { category } = req.query;
         const supabase = getSupabase();
+
+        // Get today's date in YYYY-MM-DD format (Guatemala timezone UTC-6)
+        const today = new Date();
+        today.setHours(today.getHours() - 6); // Adjust for Guatemala timezone
+        const todayStr = today.toISOString().split('T')[0];
 
         let query = supabase
             .from('events')
@@ -120,9 +126,20 @@ router.get('/', async (req, res) => {
             throw error;
         }
 
+        // Filter out past events on the backend
+        // Keep events that:
+        // 1. Have no date (date is null)
+        // 2. Have a date >= today
+        const filteredData = data.filter(event => {
+            if (!event.date) return true; // Keep events without date
+            return event.date >= todayStr; // Keep future or today's events
+        });
+
+        console.log(`[EVENTS] Filtered ${data.length - filteredData.length} past events`);
+
         res.json({
             success: true,
-            events: data
+            events: filteredData
         });
 
     } catch (error) {

@@ -20,6 +20,119 @@ Backend service for analyzing event images using OpenAI Vision API (gpt-4o-mini)
 
 ## API Endpoints
 
+### POST /api/whatsapp/webhook
+
+Receive and process flyer images from WhatsApp Business API.
+
+**Request (WhatsApp Business API format):**
+```json
+{
+  "entry": [{
+    "changes": [{
+      "value": {
+        "messages": [{
+          "id": "wamid.HBgN...",
+          "type": "image",
+          "from": "5215548787885",
+          "timestamp": "1738281600",
+          "image": {
+            "url": "https://lookaside.fbsbx.com/whatsapp_business/attachments/...",
+            "mime_type": "image/jpeg",
+            "sha256": "...",
+            "id": "123456789"
+          }
+        }]
+      }
+    }]
+  }]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Flyer received and saved",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "flyer": "https://dyvchjqtwhadgybwmbjl.supabase.co/storage/v1/object/public/whatsapp-flyers/2026-01-30/wamid.xxx.jpg",
+    "status": "pending",
+    "from": "5215548787885",
+    "messageId": "wamid.xxx"
+  }
+}
+```
+
+**Features:**
+- Automatically filters and processes only image messages
+- Downloads image from WhatsApp CDN with authentication
+- Uploads to Supabase Storage bucket `whatsapp-flyers`
+- Organizes by date: `whatsapp-flyers/YYYY-MM-DD/message-id.jpg`
+- Creates database record with status `pending` for later AI analysis
+
+### GET /api/whatsapp/webhook
+
+Webhook verification endpoint (required by WhatsApp Business API).
+
+**Query Parameters:**
+- `hub.mode`: "subscribe"
+- `hub.verify_token`: Your verification token
+- `hub.challenge`: Challenge string to echo back
+
+**Example:**
+```
+GET /api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=wow_flyers_2026&hub.challenge=1234567890
+```
+
+**Response:** Returns the challenge string (e.g., `1234567890`)
+
+### GET /api/whatsapp/flyers/pending
+
+Get list of pending flyers ready for processing.
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 5,
+  "flyers": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "flyer": "https://.../2026-01-30/wamid.xxx.jpg",
+      "status": "pending",
+      "saved": false,
+      "created_at": "2026-01-30T20:30:00Z"
+    }
+  ]
+}
+```
+
+### PATCH /api/whatsapp/flyers/:id
+
+Update flyer status after processing.
+
+**Request:**
+```json
+{
+  "status": "processed",
+  "saved": true
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "flyer": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "flyer": "https://...",
+    "status": "processed",
+    "saved": true,
+    "created_at": "2026-01-30T20:30:00Z"
+  }
+}
+```
+
 ### POST /api/events/analyze-image
 
 Analyze an event image and extract structured data.
@@ -198,7 +311,15 @@ DOCKER_ENV=true
 OPENAI_API_KEY=sk-your-api-key-here
 OPENAI_ORG_ID=org-your-org-id (optional)
 
-# MongoDB
+# Supabase
+SUPABASE_URL=https://dyvchjqtwhadgybwmbjl.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key-here
+
+# WhatsApp Business API
+WHATSAPP_ACCESS_TOKEN=EAAxxxxx  # From Meta Developer Console
+WHATSAPP_VERIFY_TOKEN=wow_flyers_2026  # Custom verification token
+
+# MongoDB (optional - currently using Supabase)
 MONGO_URL=mongodb+srv://username:password@cluster.mongodb.net/
 DB_NAME=wow_events
 

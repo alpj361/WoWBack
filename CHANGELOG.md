@@ -2,6 +2,107 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.0.9] - 2026-01-30
+
+### Added
+- 📱 **WhatsApp Flyers Webhook**: Complete integration to receive and store flyers from WhatsApp Business
+  - `POST /api/whatsapp/webhook` - Receives messages from WhatsApp Business API
+  - `GET /api/whatsapp/webhook` - Webhook verification endpoint (required by Meta)
+  - `GET /api/whatsapp/flyers/pending` - Get list of pending flyers to process
+  - `PATCH /api/whatsapp/flyers/:id` - Update flyer status (processed, saved)
+  - Added `routes/whatsappFlyers.js` - New route module for WhatsApp integration
+
+### Features
+- **Automatic Image Processing**:
+  - Filters messages to only process `type: "image"`
+  - Downloads images from WhatsApp CDN with authentication
+  - Uploads to Supabase Storage bucket `whatsapp-flyers`
+  - Organizes by date: `whatsapp-flyers/YYYY-MM-DD/message-id.jpg`
+  - Creates database record with status `pending` and `saved: false`
+
+- **Webhook Validation**:
+  - GET endpoint for Meta webhook verification
+  - Configurable verify token via `WHATSAPP_VERIFY_TOKEN` env var
+  - Returns challenge for successful verification
+
+- **Flyer Management**:
+  - Query pending flyers ready for AI analysis
+  - Update status after processing (pending → processed)
+  - Mark as saved when event is created
+  - Track original sender and message metadata
+
+### Technical Details
+```javascript
+// WhatsApp Webhook Flow:
+1. Receive POST from WhatsApp Business API
+2. Validate payload structure
+3. Filter only image messages
+4. Download image with WhatsApp Access Token
+5. Upload to Supabase Storage (whatsapp-flyers bucket)
+6. Insert record in whatsapp_flyers table:
+   - flyer: public URL
+   - status: "pending"
+   - saved: false
+7. Return success with flyer details
+```
+
+### Environment Variables
+```bash
+WHATSAPP_ACCESS_TOKEN=EAAxxxxx  # From Meta Developer Console
+WHATSAPP_VERIFY_TOKEN=wow_flyers_2026  # Custom verification token
+```
+
+### Database Schema
+```sql
+-- whatsapp_flyers table
+id          UUID         -- Auto-generated
+flyer       TEXT         -- Public URL of uploaded image
+status      VARCHAR(20)  -- 'pending', 'processed', 'failed'
+saved       BOOLEAN      -- If event was created from this flyer
+created_at  TIMESTAMPTZ  -- Automatic timestamp
+```
+
+### Integration
+- Works with existing Supabase Storage and Database
+- Compatible with Vision AI analysis pipeline
+- Designed for future Flyer Analyzer service integration
+- No N8N dependency required - all logic in WoWBack
+
+### Error Handling
+| Scenario | Response |
+|----------|----------|
+| Non-image message | 200 - "Not an image" (ignored) |
+| Invalid payload | 200 - "Ignored" (WhatsApp requires 200) |
+| Missing token | 500 - "WHATSAPP_ACCESS_TOKEN not configured" |
+| Download failed | 500 - Error details |
+| Upload failed | 500 - Error details with Supabase message |
+| DB insert failed | 500 - Error details |
+
+### Deployment
+```bash
+# 1. Configure environment variables
+WHATSAPP_ACCESS_TOKEN=your_token
+WHATSAPP_VERIFY_TOKEN=wow_flyers_2026
+
+# 2. Start server
+npm run dev  # or use PM2 for production
+
+# 3. Configure Meta Developer Console
+Callback URL: https://api.standatpd.com/api/whatsapp/webhook
+Verify Token: wow_flyers_2026
+Subscribe to: messages
+```
+
+### Nginx Configuration (if needed)
+```nginx
+location /api/whatsapp/ {
+    proxy_pass http://localhost:3001/api/whatsapp/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
 ## [1.0.8] - 2026-01-29
 
 ### Fixed

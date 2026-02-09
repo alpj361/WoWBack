@@ -64,7 +64,7 @@ router.post('/analyze-url', async (req, res) => {
 
     // Process all images in carousel
     const events = [];
-    
+
     for (let i = 0; i < mediaItems.length; i++) {
       const media = mediaItems[i];
       if (!media?.url) continue;
@@ -88,7 +88,7 @@ router.post('/analyze-url', async (req, res) => {
         const base64Image = Buffer.from(imageResponse.data, 'binary').toString('base64');
         const mimeType = imageResponse.headers['content-type'] || 'image/jpeg';
         const base64DataUrl = `data:${mimeType};base64,${base64Image}`;
-        
+
         console.log(`[URL_EXTRACTION] Image ${i + 1} downloaded (${(base64Image.length / 1024).toFixed(2)} KB)`);
 
         // Analyze image with Vision API
@@ -99,12 +99,12 @@ router.post('/analyze-url', async (req, res) => {
 
         // Check if this image contains valid event data
         const analysis = analysisResult.analysis;
-        const hasEventData = analysis.event_name && 
-                            analysis.event_name !== 'No especificado' &&
-                            analysis.event_name !== 'N/A' &&
-                            !analysis.event_name.toLowerCase().includes('portada') &&
-                            !analysis.event_name.toLowerCase().includes('título') &&
-                            !analysis.event_name.toLowerCase().includes('cover');
+        const hasEventData = analysis.event_name &&
+          analysis.event_name !== 'No especificado' &&
+          analysis.event_name !== 'N/A' &&
+          !analysis.event_name.toLowerCase().includes('portada') &&
+          !analysis.event_name.toLowerCase().includes('título') &&
+          !analysis.event_name.toLowerCase().includes('cover');
 
         if (hasEventData) {
           events.push({
@@ -126,25 +126,45 @@ router.post('/analyze-url', async (req, res) => {
       }
     }
 
+    // Get all image URLs for carousel selector
+    const allImageUrls = mediaItems
+      .filter(m => m?.url && m.type === 'image')
+      .map(m => m.url);
+
     // Return results
     if (events.length === 0) {
+      // Even if no events detected, return images for user to select
+      // This allows users to pick an image even if analysis failed
+      if (allImageUrls.length > 0) {
+        return res.json({
+          success: true,
+          source_url: url,
+          platform: 'instagram',
+          extracted_image_url: allImageUrls[0],
+          extracted_images: allImageUrls.length > 1 ? allImageUrls : undefined,
+          is_reel: extractorResponse.data.is_reel || false,
+          analysis: null, // No analysis available
+          post_metadata: postMetadata
+        });
+      }
+
       return res.status(400).json({
         success: false,
         error: 'No se encontraron eventos válidos en las imágenes.'
       });
     }
 
-    // Return response
+    // Return response with first valid event and all images
+    const bestEvent = events[0];
     res.json({
       success: true,
-      events: events,
-      metadata: {
-        source_url: url,
-        platform: 'instagram',
-        total_images: mediaItems.length,
-        valid_events: events.length,
-        post_metadata: postMetadata
-      }
+      source_url: url,
+      platform: 'instagram',
+      extracted_image_url: bestEvent.metadata.extracted_image_url,
+      extracted_images: allImageUrls.length > 1 ? allImageUrls : undefined,
+      is_reel: extractorResponse.data.is_reel || false,
+      analysis: bestEvent.analysis,
+      post_metadata: postMetadata
     });
 
   } catch (error) {
