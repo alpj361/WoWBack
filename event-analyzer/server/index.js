@@ -7,6 +7,7 @@ const eventsRoutes = require('./routes/events');
 const authRoutes = require('./routes/auth');
 const urlExtractionRoutes = require('./routes/urlExtraction');
 const whatsappFlyersRoutes = require('./routes/whatsappFlyers');
+const extractionJobsRoutes = require('./routes/extractionJobs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -48,13 +49,14 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/events', imageAnalysisRoutes);
 app.use('/api/events', urlExtractionRoutes);
+app.use('/api/extraction-jobs', extractionJobsRoutes);
 app.use('/api/whatsapp', whatsappFlyersRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
     service: 'Event Analyzer API',
-    version: '1.1.0',
+    version: '1.2.0',
     description: 'Event management and image analysis service',
     endpoints: {
       health: 'GET /api/health',
@@ -62,7 +64,9 @@ app.get('/', (req, res) => {
       listEvents: 'GET /api/events',
       getEvent: 'GET /api/events/:id',
       analyzeImage: 'POST /api/events/analyze-image',
-      analyzeUrl: 'POST /api/events/analyze-url'
+      analyzeUrl: 'POST /api/events/analyze-url',
+      processExtractionJob: 'POST /api/extraction-jobs/process/:id',
+      analyzeExtractionJob: 'POST /api/extraction-jobs/analyze/:id'
     }
   });
 });
