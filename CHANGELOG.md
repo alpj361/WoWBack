@@ -2,6 +2,49 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.0.11] - 2026-02-09
+
+### Changed
+- **URL Extraction: Two-Step Flow** — Split `POST /analyze-url` into extraction + on-demand analysis
+  - `/analyze-url` now returns extracted images immediately (no Vision API call)
+  - New `POST /analyze-extracted-image` endpoint analyzes a single image on demand
+  - Saves ~150s and ~360k tokens on carousel posts (15 images no longer auto-analyzed)
+  - User picks which image to analyze before spending tokens
+
+### Fixed
+- **WhatsApp Webhook Verification** — Hardened `GET /api/whatsapp/webhook`
+  - Returns 400 if `hub.mode`, `hub.verify_token`, or `hub.challenge` are missing
+  - Sends challenge as `text/plain` with explicit `String()` cast
+  - Masks token in logs to avoid leaking secrets
+
+### New Endpoints
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/events/analyze-extracted-image` | Analyze a single image URL with Vision API |
+
+### Response Format Changes
+```javascript
+// POST /analyze-url — now returns images only (no analysis)
+{
+  success: true,
+  source_url: "https://instagram.com/p/...",
+  platform: "instagram",
+  extracted_images: ["https://...", ...],
+  is_reel: false,
+  post_metadata: { author, description }
+}
+
+// POST /analyze-extracted-image — on-demand analysis
+// Body: { image_url: "https://...", title: "optional context" }
+{
+  success: true,
+  analysis: { event_name, date, time, location, ... },
+  metadata: { model, tokens_used, ... }
+}
+```
+
+---
+
 ## [1.0.10] - 2026-02-09
 
 ### Added

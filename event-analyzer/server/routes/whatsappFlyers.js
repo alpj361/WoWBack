@@ -354,13 +354,18 @@ router.get('/webhook', (req, res) => {
   const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'wow_flyers_2026';
 
   console.log('🔐 WhatsApp webhook verification request');
-  console.log(`Mode: ${mode}, Token: ${token}`);
+  console.log('Query params:', { mode, token: token ? '***' : undefined, challenge: challenge != null });
+
+  if (!mode || !token || challenge === undefined || challenge === null) {
+    console.log('❌ Missing verification params (check nginx forwards query string)');
+    return res.status(400).send('Missing hub params');
+  }
 
   if (mode === 'subscribe' && token === verifyToken) {
     console.log('✅ Webhook verified');
-    res.status(200).send(challenge);
+    res.status(200).contentType('text/plain').send(String(challenge));
   } else {
-    console.log('❌ Webhook verification failed');
+    console.log('❌ Webhook verification failed (token mismatch or wrong mode)');
     res.status(403).send('Forbidden');
   }
 });
