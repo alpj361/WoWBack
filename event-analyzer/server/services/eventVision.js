@@ -18,7 +18,13 @@ async function analyzeEventImage(imageData, title = 'Evento') {
   try {
     console.log(`[EVENT_VISION] 📸 Analyzing event image: "${title}"`);
 
+    const now = new Date();
+    const currentMonth = now.toLocaleString('es', { month: 'long' });
+    const currentYear = now.getFullYear();
+
     const systemPrompt = `Eres un especialista en análisis de imágenes de eventos.
+
+CONTEXTO TEMPORAL: Estamos en ${currentMonth} de ${currentYear}. Si la imagen solo muestra un día de la semana o número de día sin mes/año, asume que se refiere al mes y año actual o al próximo mes más cercano.
 
 TAREA: Analiza esta imagen de evento y extrae TODA la información visible.
 

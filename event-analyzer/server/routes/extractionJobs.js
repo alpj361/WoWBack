@@ -138,7 +138,7 @@ router.post('/analyze/:id', async (req, res) => {
       return;
     }
 
-    if (job.status !== 'ready') {
+    if (job.status !== 'ready' && job.status !== 'analyzing') {
       console.log(`[EXTRACTION_JOB] Job ${id} not ready for analysis (status: ${job.status})`);
       return;
     }
