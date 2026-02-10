@@ -28,6 +28,7 @@ EXTRAE:
 - Hora del evento (time) en formato HH:MM (24 horas)
 - Descripción/detalles del evento (description)
 - Ubicación/lugar (location)
+- Organizador (organizer) - busca @usuario de Instagram, nombre de organizador, promotor, o quien presenta el evento
 
 INSTRUCCIONES:
 - Si encuentras múltiples fechas, usa la principal del evento
@@ -36,6 +37,7 @@ INSTRUCCIONES:
 - Detecta información en español e inglés
 - Para fechas en formato texto (ej: "15 de agosto"), conviértelas a YYYY-MM-DD
 - Para horas, usa formato 24 horas (ej: "8:00 PM" → "20:00")
+- Para organizador, busca: @handles de Instagram, "presenta:", "organiza:", "by:", logos de promotoras, nombres de DJs/artistas principales
 
 FORMATO DE SALIDA (JSON estricto):
 {
@@ -44,6 +46,7 @@ FORMATO DE SALIDA (JSON estricto):
   "time": "HH:MM o No especificado",
   "description": "...",
   "location": "...",
+  "organizer": "@instagram o nombre del organizador o No especificado",
   "confidence": "high|medium|low",
   "extracted_text": "Todo el texto visible en la imagen"
 }`;
@@ -106,13 +109,14 @@ FORMATO DE SALIDA (JSON estricto):
         time: 'No especificado',
         description: rawContent.substring(0, 500),
         location: 'No especificado',
+        organizer: 'No especificado',
         confidence: 'low',
         extracted_text: rawContent
       };
     }
 
     // Validate required fields
-    const requiredFields = ['event_name', 'date', 'time', 'description', 'location', 'confidence'];
+    const requiredFields = ['event_name', 'date', 'time', 'description', 'location', 'organizer', 'confidence'];
     const missingFields = requiredFields.filter(field => !analysis.hasOwnProperty(field));
 
     if (missingFields.length > 0) {

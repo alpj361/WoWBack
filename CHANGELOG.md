@@ -2,6 +2,51 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.0.12] - 2026-02-09
+
+### Added
+- **Background Extraction Jobs System**: New async extraction architecture for reliable background processing
+  - `POST /api/extraction-jobs/process/:id` - Trigger image extraction (fire-and-forget)
+  - `POST /api/extraction-jobs/analyze/:id` - Trigger image analysis (fire-and-forget)
+  - `GET /api/extraction-jobs/pending` - List pending jobs (internal use)
+  - Jobs persist in Supabase `extraction_jobs` table with RLS policies
+  - Works reliably when app goes to background or is closed
+
+### New Endpoints
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/extraction-jobs/process/:id` | Trigger extraction for a job (async, returns immediately) |
+| POST | `/api/extraction-jobs/analyze/:id` | Trigger analysis for selected image (async) |
+| GET | `/api/extraction-jobs/pending` | Get pending jobs for worker polling |
+
+### Architecture
+```
+Frontend                  Supabase                 WoWBack
+   │                         │                        │
+   │ 1. Insert job           │                        │
+   │ ─────────────────────► │                        │
+   │                         │                        │
+   │ 2. Fire-and-forget      │                        │
+   │ ─────────────────────────────────────────────► │
+   │                         │                        │
+   │                         │ 3. Update status/data │
+   │                         │ ◄───────────────────── │
+   │                         │                        │
+   │ 4. Poll for updates     │                        │
+   │ ◄───────────────────── │                        │
+```
+
+### Technical Details
+- Fire-and-forget pattern: API responds immediately, processing continues async
+- Status updates written directly to Supabase by backend
+- Frontend polls Supabase for status changes (not API)
+- Survives app backgrounding, closing, and network interruptions
+
+### Files Added
+- `routes/extractionJobs.js` - New route module for extraction jobs
+
+---
+
 ## [1.0.11] - 2026-02-09
 
 ### Changed
