@@ -1,6 +1,106 @@
 const OpenAI = require('openai');
 
 /**
+ * Map Spanish day names to JS Date day indices (0=Sunday, 6=Saturday)
+ */
+const DAY_NAME_TO_INDEX = {
+  'domingo': 0,
+  'lunes': 1,
+  'martes': 2,
+  'miércoles': 3,
+  'miercoles': 3,
+  'jueves': 4,
+  'viernes': 5,
+  'sábado': 6,
+  'sabado': 6
+};
+
+/**
+ * Calculate recurring dates programmatically from pattern info
+ * @param {Object} analysis - The Vision analysis result
+ * @returns {string[]} Array of dates in YYYY-MM-DD format
+ */
+function calculateRecurringDates(analysis) {
+  if (!analysis.is_recurring) return [];
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-indexed
+
+  // Parse month range
+  let startMonth, startYear, endMonth, endYear;
+
+  if (analysis.recurring_month_start) {
+    const [sy, sm] = analysis.recurring_month_start.split('-').map(Number);
+    startYear = sy;
+    startMonth = sm - 1; // convert to 0-indexed
+  } else {
+    startYear = currentYear;
+    startMonth = currentMonth;
+  }
+
+  if (analysis.recurring_month_end) {
+    const [ey, em] = analysis.recurring_month_end.split('-').map(Number);
+    endYear = ey;
+    endMonth = em - 1;
+  } else {
+    endYear = startYear;
+    endMonth = startMonth;
+  }
+
+  const dates = [];
+
+  // Case 1: Day-of-week based (e.g. "todos los viernes")
+  const dayName = (analysis.recurring_day_of_week || '').toLowerCase().trim();
+  const dayIndex = DAY_NAME_TO_INDEX[dayName];
+
+  if (dayIndex !== undefined) {
+    let year = startYear;
+    let month = startMonth;
+
+    while (year < endYear || (year === endYear && month <= endMonth)) {
+      // Iterate all days of this month
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      for (let day = 1; day <= daysInMonth; day++) {
+        const d = new Date(year, month, day);
+        if (d.getDay() === dayIndex) {
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          dates.push(`${yyyy}-${mm}-${dd}`);
+        }
+      }
+      // Next month
+      month++;
+      if (month > 11) { month = 0; year++; }
+    }
+  }
+
+  // Case 2: Specific day numbers (e.g. "los días 5, 12, 19, 26")
+  const specificDays = analysis.recurring_specific_days;
+  if (Array.isArray(specificDays) && specificDays.length > 0 && dates.length === 0) {
+    let year = startYear;
+    let month = startMonth;
+
+    while (year < endYear || (year === endYear && month <= endMonth)) {
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      for (const day of specificDays) {
+        if (day >= 1 && day <= daysInMonth) {
+          const mm = String(month + 1).padStart(2, '0');
+          const dd = String(day).padStart(2, '0');
+          dates.push(`${year}-${mm}-${dd}`);
+        }
+      }
+      month++;
+      if (month > 11) { month = 0; year++; }
+    }
+  }
+
+  console.log(`[EVENT_VISION] 📅 Calculated ${dates.length} recurring dates: ${dates.join(', ')}`);
+  return dates;
+}
+
+/**
  * Analyze event image using OpenAI Vision API (gpt-4o-mini)
  * @param {string} imageData - Base64 image data or image URL
  * @param {string} title - Optional title/context for the image
@@ -43,14 +143,14 @@ EXTRAE:
 EVENTOS RECURRENTES:
 Si el flyer indica que el evento se repite (ej: "todos los lunes", "cada sábado de febrero", "los días 5, 12 y 19"), debes:
 1. Marcar is_recurring como true
-2. En recurring_pattern describir el patrón (ej: "Todos los lunes de febrero ${currentYear}")
-3. En recurring_dates listar TODAS las fechas específicas en formato YYYY-MM-DD
+2. En recurring_pattern describir el patrón tal como aparece (ej: "Todos los viernes del mes")
+3. En recurring_day_of_week indicar el día de la semana en español minúsculas: "lunes","martes","miércoles","jueves","viernes","sábado","domingo" o null si son días específicos
+4. En recurring_specific_days listar los números de día si se mencionan explícitamente (ej: [5, 12, 19, 26]) o [] si es por día de semana
+5. En recurring_month_start indicar el mes de inicio en formato "YYYY-MM"
+6. En recurring_month_end indicar el mes de fin en formato "YYYY-MM" (igual que start si es un solo mes)
+7. DEJAR recurring_dates como array VACÍO [] — las fechas exactas se calculan por el sistema
 
-Ejemplos de patrones recurrentes:
-- "Todos los lunes de febrero" → calcular todos los lunes de febrero ${currentYear}
-- "Cada sábado" → si no especifica mes, usar el mes actual o siguiente
-- "Los días 5, 12, 19 y 26" → convertir a fechas completas del mes indicado
-- "Todos los viernes de marzo a mayo" → listar todos los viernes de esos meses
+IMPORTANTE: NO calcules las fechas recurrentes tú mismo. Solo extrae el patrón, día de semana y rango de meses. El cálculo de calendario lo hace el servidor.
 
 INSTRUCCIONES:
 - Si encuentras múltiples fechas individuales, usa la primera como date principal
@@ -75,7 +175,11 @@ FORMATO DE SALIDA (JSON estricto):
   "registration_url": "https://... o No especificado",
   "is_recurring": true/false,
   "recurring_pattern": "descripción del patrón o null si no es recurrente",
-  "recurring_dates": ["YYYY-MM-DD", "YYYY-MM-DD", ...] o [],
+  "recurring_day_of_week": "viernes o null si no aplica",
+  "recurring_specific_days": [5, 12, 19] o [],
+  "recurring_month_start": "YYYY-MM o null",
+  "recurring_month_end": "YYYY-MM o null",
+  "recurring_dates": [],
   "confidence": "high|medium|low",
   "extracted_text": "Todo el texto visible en la imagen"
 }`;
@@ -169,7 +273,19 @@ FORMATO DE SALIDA (JSON estricto):
     if (!analysis.registration_url) analysis.registration_url = 'No especificado';
     if (analysis.is_recurring === undefined) analysis.is_recurring = false;
     if (!analysis.recurring_pattern) analysis.recurring_pattern = null;
-    if (!Array.isArray(analysis.recurring_dates)) analysis.recurring_dates = [];
+
+    // Calculate recurring dates programmatically (never trust LLM calendar math)
+    if (analysis.is_recurring) {
+      analysis.recurring_dates = calculateRecurringDates(analysis);
+    } else {
+      analysis.recurring_dates = [];
+    }
+
+    // Clean up intermediate fields not needed in final output
+    delete analysis.recurring_day_of_week;
+    delete analysis.recurring_specific_days;
+    delete analysis.recurring_month_start;
+    delete analysis.recurring_month_end;
 
     // Extract token usage
     const tokensUsed = response.usage?.total_tokens || 0;
