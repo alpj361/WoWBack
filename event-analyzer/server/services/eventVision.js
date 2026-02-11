@@ -32,18 +32,34 @@ TAREA: Analiza esta imagen de evento y extrae TODA la información visible.
 EXTRAE:
 - Nombre del evento (event_name)
 - Fecha del evento (date) en formato YYYY-MM-DD
-- Hora del evento (time) en formato HH:MM (24 horas)
+- Hora de inicio (time) en formato HH:MM (24 horas)
+- Hora de fin (end_time) en formato HH:MM (24 horas) - si se menciona
 - Descripción/detalles del evento (description)
 - Ubicación/lugar (location)
 - Organizador (organizer) - busca @usuario de Instagram, nombre de organizador, promotor, o quien presenta el evento
+- Precio (price) - "Gratis", "Q50", "50 GTQ", etc.
+- URL de registro (registration_url) - si hay un link visible
+
+EVENTOS RECURRENTES:
+Si el flyer indica que el evento se repite (ej: "todos los lunes", "cada sábado de febrero", "los días 5, 12 y 19"), debes:
+1. Marcar is_recurring como true
+2. En recurring_pattern describir el patrón (ej: "Todos los lunes de febrero ${currentYear}")
+3. En recurring_dates listar TODAS las fechas específicas en formato YYYY-MM-DD
+
+Ejemplos de patrones recurrentes:
+- "Todos los lunes de febrero" → calcular todos los lunes de febrero ${currentYear}
+- "Cada sábado" → si no especifica mes, usar el mes actual o siguiente
+- "Los días 5, 12, 19 y 26" → convertir a fechas completas del mes indicado
+- "Todos los viernes de marzo a mayo" → listar todos los viernes de esos meses
 
 INSTRUCCIONES:
-- Si encuentras múltiples fechas, usa la principal del evento
+- Si encuentras múltiples fechas individuales, usa la primera como date principal
 - Si no encuentras algún dato, indica "No especificado"
 - Transcribe texto exactamente como aparece
 - Detecta información en español e inglés
 - Para fechas en formato texto (ej: "15 de agosto"), conviértelas a YYYY-MM-DD
 - Para horas, usa formato 24 horas (ej: "8:00 PM" → "20:00")
+- Si dice "de 7pm a 10pm", extrae time="19:00" y end_time="22:00"
 - Para organizador, busca: @handles de Instagram, "presenta:", "organiza:", "by:", logos de promotoras, nombres de DJs/artistas principales
 
 FORMATO DE SALIDA (JSON estricto):
@@ -51,9 +67,15 @@ FORMATO DE SALIDA (JSON estricto):
   "event_name": "...",
   "date": "YYYY-MM-DD o No especificado",
   "time": "HH:MM o No especificado",
+  "end_time": "HH:MM o No especificado",
   "description": "...",
   "location": "...",
   "organizer": "@instagram o nombre del organizador o No especificado",
+  "price": "Gratis, Q50, etc. o No especificado",
+  "registration_url": "https://... o No especificado",
+  "is_recurring": true/false,
+  "recurring_pattern": "descripción del patrón o null si no es recurrente",
+  "recurring_dates": ["YYYY-MM-DD", "YYYY-MM-DD", ...] o [],
   "confidence": "high|medium|low",
   "extracted_text": "Todo el texto visible en la imagen"
 }`;
@@ -114,9 +136,15 @@ FORMATO DE SALIDA (JSON estricto):
         event_name: 'Error en análisis',
         date: 'No especificado',
         time: 'No especificado',
+        end_time: 'No especificado',
         description: rawContent.substring(0, 500),
         location: 'No especificado',
         organizer: 'No especificado',
+        price: 'No especificado',
+        registration_url: 'No especificado',
+        is_recurring: false,
+        recurring_pattern: null,
+        recurring_dates: [],
         confidence: 'low',
         extracted_text: rawContent
       };
@@ -134,6 +162,14 @@ FORMATO DE SALIDA (JSON estricto):
       });
       if (!analysis.confidence) analysis.confidence = 'low';
     }
+
+    // Set defaults for new optional fields
+    if (!analysis.end_time) analysis.end_time = 'No especificado';
+    if (!analysis.price) analysis.price = 'No especificado';
+    if (!analysis.registration_url) analysis.registration_url = 'No especificado';
+    if (analysis.is_recurring === undefined) analysis.is_recurring = false;
+    if (!analysis.recurring_pattern) analysis.recurring_pattern = null;
+    if (!Array.isArray(analysis.recurring_dates)) analysis.recurring_dates = [];
 
     // Extract token usage
     const tokensUsed = response.usage?.total_tokens || 0;
