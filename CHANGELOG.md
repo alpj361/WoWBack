@@ -2,6 +2,63 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.0.13] - 2026-02-10
+
+### Added
+- 📝 **Event Drafts Database Table**: New Supabase table for storing event drafts before publishing
+  - `event_drafts` table with full event fields + metadata
+  - RLS policies for user-specific access (view, insert, update, delete)
+  - Indexes on `user_id`, `extraction_job_id`, and `created_at`
+  - Auto-updating `updated_at` trigger
+
+### Database Schema
+```sql
+CREATE TABLE event_drafts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  extraction_job_id UUID REFERENCES extraction_jobs(id) ON DELETE SET NULL,
+
+  -- Event data (same fields as events table)
+  title TEXT NOT NULL,
+  description TEXT,
+  category VARCHAR(50) DEFAULT 'general',
+  image TEXT,
+  date DATE,
+  time TIME,
+  location TEXT,
+  organizer TEXT,
+
+  -- Payment/registration fields
+  price DECIMAL(10,2),
+  registration_form_url TEXT,
+  bank_name TEXT,
+  bank_account_number TEXT,
+
+  -- Metadata
+  source_image_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### RLS Policies
+| Policy | Operation | Rule |
+|--------|-----------|------|
+| Users can view own drafts | SELECT | `auth.uid() = user_id` |
+| Users can insert own drafts | INSERT | `auth.uid() = user_id` |
+| Users can update own drafts | UPDATE | `auth.uid() = user_id` |
+| Users can delete own drafts | DELETE | `auth.uid() = user_id` |
+
+### Migration Applied
+- `create_event_drafts_table` - Full migration with table, indexes, RLS, and trigger
+
+### Integration
+- Drafts are managed directly via Supabase client from frontend
+- No API endpoints needed - all CRUD operations use Supabase SDK
+- Publishing a draft creates an event in `events` table and deletes the draft
+
+---
+
 ## [1.0.12] - 2026-02-09
 
 ### Added
