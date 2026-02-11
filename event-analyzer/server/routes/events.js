@@ -16,9 +16,9 @@ router.post('/', async (req, res) => {
         }
 
         const {
-            title, description, category, image, date, time, location, user_id,
+            title, description, category, image, date, time, end_time, location, organizer, user_id,
             price, registration_form_url, bank_account_number, bank_name,
-            requires_attendance_check
+            requires_attendance_check, is_recurring, recurring_dates, target_audience
         } = req.body;
 
         if (!title || !title.trim()) {
@@ -49,13 +49,18 @@ router.post('/', async (req, res) => {
             image: image || null,
             date: date || null,
             time: time || null,
+            end_time: end_time || null,
             location: location?.trim() || null,
+            organizer: organizer?.trim() || null,
             user_id: user_id || null,
             price: price || null,
             registration_form_url: registration_form_url?.trim() || null,
             bank_account_number: bank_account_number?.trim() || null,
             bank_name: bank_name?.trim() || null,
-            requires_attendance_check: requires_attendance_check || false
+            requires_attendance_check: requires_attendance_check || false,
+            is_recurring: is_recurring || false,
+            recurring_dates: recurring_dates || null,
+            target_audience: target_audience || null
         };
 
         console.log('[EVENTS] Creating event:', eventData.title);
@@ -126,16 +131,39 @@ router.get('/', async (req, res) => {
             throw error;
         }
 
+        // Helper function to get the effective expiration date for an event
+        // For recurring events, use the LAST date (latest) from all dates
+        const getEffectiveExpirationDate = (event) => {
+            if (!event.date) return null;
+
+            // If not recurring or no recurring_dates, use main date
+            if (!event.is_recurring || !event.recurring_dates || event.recurring_dates.length === 0) {
+                return event.date;
+            }
+
+            // Combine main date with recurring dates and find the latest
+            const allDates = [event.date, ...event.recurring_dates];
+
+            // Sort dates and get the last one (latest)
+            const sortedDates = allDates
+                .filter(d => d) // Remove nulls
+                .sort((a, b) => a.localeCompare(b));
+
+            return sortedDates[sortedDates.length - 1] || event.date;
+        };
+
         // Filter out past events on the backend
         // Keep events that:
         // 1. Have no date (date is null)
-        // 2. Have a date >= today
+        // 2. Have an effective expiration date >= today
+        //    (for recurring events, this is the LAST date)
         const filteredData = data.filter(event => {
-            if (!event.date) return true; // Keep events without date
-            return event.date >= todayStr; // Keep future or today's events
+            const expirationDate = getEffectiveExpirationDate(event);
+            if (!expirationDate) return true; // Keep events without date
+            return expirationDate >= todayStr; // Keep if last date hasn't passed
         });
 
-        console.log(`[EVENTS] Filtered ${data.length - filteredData.length} past events`);
+        console.log(`[EVENTS] Filtered ${data.length - filteredData.length} past events (using recurring dates for expiration)`);
 
         res.json({
             success: true,

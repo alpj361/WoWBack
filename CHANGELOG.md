@@ -2,6 +2,62 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.0.14] - 2026-02-11
+
+### Added - Event Fields & Recurring Date Expiration
+
+#### New Event Fields (`routes/events.js`)
+- **POST /api/events** ahora acepta:
+  - `end_time` - Hora de finalización del evento
+  - `organizer` - Nombre del organizador
+  - `is_recurring` - Boolean para eventos recurrentes
+  - `recurring_dates` - Array de fechas adicionales (TEXT[])
+  - `target_audience` - Array de audiencia objetivo (TEXT[])
+
+#### Filtro de Eventos Expirados - Eventos Recurrentes
+- **Nueva lógica de expiración**: Para eventos recurrentes, usa la **ÚLTIMA fecha** para determinar si expiró
+- Un evento recurrente **NO desaparece** hasta que **TODAS** sus fechas hayan pasado
+- Ejemplo: Evento con fechas [10, 15, 20] → visible hasta después del día 20
+
+### Technical Details
+```javascript
+// Nueva función helper para calcular fecha de expiración efectiva
+const getEffectiveExpirationDate = (event) => {
+    if (!event.date) return null;
+
+    // Si no es recurrente, usar fecha principal
+    if (!event.is_recurring || !event.recurring_dates?.length) {
+        return event.date;
+    }
+
+    // Combinar fecha principal + recurrentes y obtener la última
+    const allDates = [event.date, ...event.recurring_dates]
+        .filter(d => d)
+        .sort((a, b) => a.localeCompare(b));
+
+    return allDates[allDates.length - 1] || event.date;
+};
+
+// Filtro actualizado
+const filteredData = data.filter(event => {
+    const expirationDate = getEffectiveExpirationDate(event);
+    if (!expirationDate) return true;
+    return expirationDate >= todayStr;
+});
+```
+
+### Database Fields
+```sql
+-- Campos soportados en POST /api/events
+end_time        TIME          -- Hora de finalización
+organizer       TEXT          -- Nombre del organizador
+is_recurring    BOOLEAN       -- Si es evento recurrente
+recurring_dates TEXT[]        -- Fechas adicionales (YYYY-MM-DD)
+target_audience TEXT[]        -- Audiencia objetivo
+```
+
+---
+
 ## [1.0.13] - 2026-02-10
 
 ### Added
