@@ -50,20 +50,23 @@ function calculateRecurringDates(analysis) {
 
   const dates = [];
 
-  // Case 1: Day-of-week based (e.g. "todos los viernes")
-  const dayName = (analysis.recurring_day_of_week || '').toLowerCase().trim();
-  const dayIndex = DAY_NAME_TO_INDEX[dayName];
+  // Case 1: Day-of-week based (e.g. "todos los viernes" o "viernes y sábado")
+  // Soporta tanto string como array para compatibilidad
+  const rawDays = analysis.recurring_days_of_week || analysis.recurring_day_of_week;
+  const dayNames = Array.isArray(rawDays)
+    ? rawDays.map(d => d.toLowerCase().trim())
+    : rawDays ? [rawDays.toLowerCase().trim()] : [];
+  const dayIndices = dayNames.map(d => DAY_NAME_TO_INDEX[d]).filter(i => i !== undefined);
 
-  if (dayIndex !== undefined) {
+  if (dayIndices.length > 0) {
     let year = startYear;
     let month = startMonth;
 
     while (year < endYear || (year === endYear && month <= endMonth)) {
-      // Iterate all days of this month
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       for (let day = 1; day <= daysInMonth; day++) {
         const d = new Date(year, month, day);
-        if (d.getDay() === dayIndex) {
+        if (dayIndices.includes(d.getDay())) {
           const yyyy = d.getFullYear();
           const mm = String(d.getMonth() + 1).padStart(2, '0');
           const dd = String(d.getDate()).padStart(2, '0');
@@ -74,6 +77,8 @@ function calculateRecurringDates(analysis) {
       month++;
       if (month > 11) { month = 0; year++; }
     }
+    // Ordenar por fecha
+    dates.sort();
   }
 
   // Case 2: Specific day numbers (e.g. "los días 5, 12, 19, 26")
@@ -139,18 +144,77 @@ EXTRAE:
 - Organizador (organizer) - busca @usuario de Instagram, nombre de organizador, promotor, o quien presenta el evento
 - Precio (price) - "Gratis", "Q50", "50 GTQ", etc.
 - URL de registro (registration_url) - si hay un link visible
+- Tipo de evento (event_type) - clasifica el evento en una de estas tres categorías:
+  • "voluntariado" → limpieza, reforestación, donación, ayuda comunitaria, causas sociales
+  • "entretenimiento" → concierto, fiesta, festival, exposición, obra de teatro, cine, deporte espectáculo
+  • "general" → todo lo demás (conferencia, taller, feria, reunión, clase, etc.)
 
-EVENTOS RECURRENTES:
-Si el flyer indica que el evento se repite (ej: "todos los lunes", "cada sábado de febrero", "los días 5, 12 y 19"), debes:
-1. Marcar is_recurring como true
-2. En recurring_pattern describir el patrón tal como aparece (ej: "Todos los viernes del mes")
-3. En recurring_day_of_week indicar el día de la semana en español minúsculas: "lunes","martes","miércoles","jueves","viernes","sábado","domingo" o null si son días específicos
-4. En recurring_specific_days listar los números de día si se mencionan explícitamente (ej: [5, 12, 19, 26]) o [] si es por día de semana
-5. En recurring_month_start indicar el mes de inicio en formato "YYYY-MM"
-6. En recurring_month_end indicar el mes de fin en formato "YYYY-MM" (igual que start si es un solo mes)
-7. DEJAR recurring_dates como array VACÍO [] — las fechas exactas se calculan por el sistema
+EVENTOS RECURRENTES vs FECHAS MÚLTIPLES ESPECÍFICAS — LEE ESTO CON CUIDADO:
 
-IMPORTANTE: NO calcules las fechas recurrentes tú mismo. Solo extrae el patrón, día de semana y rango de meses. El cálculo de calendario lo hace el servidor.
+CASO A — FECHAS ESPECÍFICAS (is_recurring: false):
+El flyer menciona días concretos con número. Aunque diga el nombre del día, si tiene número, son fechas puntuales.
+Ejemplos: "viernes 13 y sábado 14", "jueves 5 y viernes 6", "13 y 14 de febrero"
+→ is_recurring: false
+→ date: primera fecha (ej: "2026-02-13")
+→ recurring_specific_days: los números de día [13, 14]
+→ recurring_days_of_week: []
+
+CASO B — RECURRENTE POR DÍA DE SEMANA (is_recurring: true):
+El flyer indica que el evento se repite sin números específicos, usando "todos los", "cada", o solo el nombre del día sin número.
+Ejemplos: "todos los viernes de febrero", "cada viernes y sábado", "viernes y sábados de febrero"
+→ is_recurring: true
+→ recurring_days_of_week: ["viernes"] o ["viernes", "sábado"]
+→ recurring_specific_days: []
+
+CASO C — RANGO DE FECHAS CONTINUO (is_recurring: true):
+El flyer indica un período continuo de varios días seguidos.
+Ejemplos: "del 12 al 18 de febrero", "del viernes al domingo", "3 al 5 de marzo"
+→ is_recurring: true
+→ recurring_pattern: "del 12 al 18 de febrero"
+→ recurring_specific_days: todos los números del rango [12, 13, 14, 15, 16, 17, 18]
+→ recurring_days_of_week: []
+
+CASO D — EVENTO MENSUAL (is_recurring: true):
+El flyer indica que ocurre cada mes en el mismo día o día de semana.
+Ejemplos: "cada primer sábado del mes", "el 15 de cada mes", "mensualmente los jueves"
+→ is_recurring: true
+→ recurring_pattern: describir el patrón mensual exacto
+→ recurring_days_of_week: ["sábado"] (si es por día de semana)
+→ recurring_specific_days: [15] (si es por número de día)
+→ recurring_month_start: mes actual en "YYYY-MM"
+→ recurring_month_end: 3-6 meses adelante (estimado razonable)
+
+CASO E — EVENTO ANUAL (is_recurring: false):
+El flyer indica que es un evento anual o de edición especial con fecha fija.
+Ejemplos: "edición 2026", "aniversario 10", "feria anual agosto 2026", "festival 15 al 20 de julio"
+→ is_recurring: false
+→ date: primera fecha del evento
+→ recurring_specific_days: si son varios días consecutivos [15, 16, 17, 18, 19, 20]
+
+CASO F — TEMPORADA O TOUR (is_recurring: true):
+El flyer cubre múltiples fechas en distintos meses (gira, temporada teatral, serie de conciertos).
+Ejemplos: "gira febrero-abril", "temporada marzo a mayo", "todos los sábados de febrero a abril"
+→ is_recurring: true
+→ recurring_pattern: describir la temporada
+→ recurring_days_of_week: ["sábado"] si aplica
+→ recurring_month_start: "2026-02"
+→ recurring_month_end: "2026-04"
+
+CASO G — MÚLTIPLES FECHAS SALTADAS (is_recurring: false):
+El flyer lista fechas específicas no consecutivas y no semanales.
+Ejemplos: "5, 19 y 26 de febrero", "martes 3 y jueves 17"
+→ is_recurring: false
+→ date: primera fecha
+→ recurring_specific_days: [3, 17] o [5, 19, 26]
+
+REGLA CLAVE: Si el nombre del día va acompañado de un número ("viernes 13"), es fecha específica. Si solo dice el nombre del día sin número ("los viernes"), es recurrente.
+
+Para eventos recurrentes (Casos B, C, D, F):
+- recurring_month_start: mes de inicio en formato "YYYY-MM"
+- recurring_month_end: mes de fin en formato "YYYY-MM"
+- DEJAR recurring_dates: [] — el servidor calcula las fechas exactas
+
+IMPORTANTE: NO calcules las fechas recurrentes tú mismo.
 
 INSTRUCCIONES:
 - Si encuentras múltiples fechas individuales, usa la primera como date principal
@@ -173,9 +237,10 @@ FORMATO DE SALIDA (JSON estricto):
   "organizer": "@instagram o nombre del organizador o No especificado",
   "price": "Gratis, Q50, etc. o No especificado",
   "registration_url": "https://... o No especificado",
+  "event_type": "voluntariado|entretenimiento|general",
   "is_recurring": true/false,
   "recurring_pattern": "descripción del patrón o null si no es recurrente",
-  "recurring_day_of_week": "viernes o null si no aplica",
+  "recurring_days_of_week": ["viernes", "sábado"] o [] si no aplica,
   "recurring_specific_days": [5, 12, 19] o [],
   "recurring_month_start": "YYYY-MM o null",
   "recurring_month_end": "YYYY-MM o null",
@@ -271,18 +336,34 @@ FORMATO DE SALIDA (JSON estricto):
     if (!analysis.end_time) analysis.end_time = 'No especificado';
     if (!analysis.price) analysis.price = 'No especificado';
     if (!analysis.registration_url) analysis.registration_url = 'No especificado';
+    if (!analysis.event_type) analysis.event_type = 'general';
     if (analysis.is_recurring === undefined) analysis.is_recurring = false;
     if (!analysis.recurring_pattern) analysis.recurring_pattern = null;
 
     // Calculate recurring dates programmatically (never trust LLM calendar math)
     if (analysis.is_recurring) {
+      // Caso B y C: recurrente por día de semana o rango
       analysis.recurring_dates = calculateRecurringDates(analysis);
+    } else if (Array.isArray(analysis.recurring_specific_days) && analysis.recurring_specific_days.length > 1) {
+      // Caso A: fechas específicas múltiples (ej: "viernes 13 y sábado 14")
+      // Derivar el mes desde la fecha principal del evento
+      const baseDate = analysis.date && analysis.date !== 'No especificado' ? analysis.date : null;
+      if (baseDate) {
+        const [y, m] = baseDate.split('-').map(Number);
+        analysis.recurring_dates = analysis.recurring_specific_days
+          .map(day => `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
+          .sort();
+        console.log(`[EVENT_VISION] 📅 Fechas específicas múltiples: ${analysis.recurring_dates.join(', ')}`);
+      } else {
+        analysis.recurring_dates = [];
+      }
     } else {
       analysis.recurring_dates = [];
     }
 
     // Clean up intermediate fields not needed in final output
-    delete analysis.recurring_day_of_week;
+    delete analysis.recurring_days_of_week;
+    delete analysis.recurring_day_of_week;  // compatibilidad con respuestas antiguas
     delete analysis.recurring_specific_days;
     delete analysis.recurring_month_start;
     delete analysis.recurring_month_end;
