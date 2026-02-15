@@ -144,10 +144,26 @@ EXTRAE:
 - Organizador (organizer) - busca @usuario de Instagram, nombre de organizador, promotor, o quien presenta el evento
 - Precio (price) - "Gratis", "Q50", "50 GTQ", etc.
 - URL de registro (registration_url) - si hay un link visible
-- Tipo de evento (event_type) - clasifica el evento en una de estas tres categorías:
-  • "voluntariado" → limpieza, reforestación, donación, ayuda comunitaria, causas sociales
-  • "entretenimiento" → concierto, fiesta, festival, exposición, obra de teatro, cine, deporte espectáculo
-  • "general" → todo lo demás (conferencia, taller, feria, reunión, clase, etc.)
+- Categoría (category): clasifica el evento en una de estas tres categorías:
+  • "music" → concierto, festival, dj, arte, teatro, cine, danza, exposición, karaoke
+  • "volunteer" → limpieza, reforestación, donación, ayuda comunitaria, causas sociales, salud
+  • "general" → conferencia, taller, feria, reunión, clase, deporte, mercado, networking
+
+- Subcategoría (subcategory): elige el id más preciso según la categoría. Si no hay coincidencia clara → null
+  music: rock-concert|pop-concert|electronic-concert|reggaeton-urbano|jazz-blues|classical-music|latin-salsa|folk-traditional|indie-alternative|hip-hop-rap|metal-hardcore|acoustic-unplugged|open-mic|live-band|music-festival|dj-set|karaoke|choir-performance|art-exhibition|theater-play|dance-performance|comedy-show|poetry-slam|film-screening|cultural-festival|art-music-gathering
+  volunteer: environmental-cleanup|tree-planting|animal-rescue|food-bank|community-build|tutoring-education|medical-campaign|blood-donation|clothing-drive|elderly-support|children-support|disability-support|disaster-relief|habitat-restoration|fundraiser-walk|beach-cleanup|digital-literacy|mental-health-awareness|social-housing|youth-mentorship|lgbt-awareness|political-youth|university-awareness|ong-campaign|human-rights|womens-rights|indigenous-rights|migrant-support|anti-corruption|climate-activism|disability-rights|animal-rights|peace-culture|civic-education|social-entrepreneurship
+  general: networking-event|startup-pitch|workshop-skills|conference-talk|sports-game|running-race|yoga-wellness|food-tasting|craft-beer|flea-market|farmers-market|art-craft-fair|book-club|language-exchange|gaming-tournament|board-games|tech-meetup|photography-walk|hiking-outdoors|spiritual-retreat|trivia-quiz|hackathon|graduation-ceremony|launch-party|private-party
+
+- Tags (tags): array de 1-4 tags del evento que apliquen visualmente o por contexto:
+  music: outdoor|indoor|18+|todo-público|bar|gratis|boletos|VIP|acústico|festival|noche|tarde
+  volunteer: fin-de-semana|presencial|familias|estudiantes|sin-experiencia|certificado|transporte|comida-incluida
+  general: outdoor|indoor|18+|todo-público|gratis|networking|noche|tarde|fin-de-semana|familias|pets-ok
+
+- Características del evento (event_features): inferir del contexto visual, descripción y tipo de evento:
+  mood: "energético"|"relajado"|"romántico"|"social"|"íntimo"
+  vibe: "casual"|"formal"|"underground"|"familiar"|"exclusivo"
+  timeOfDay: "mañana"|"tarde"|"noche"|"madrugada"
+  socialSetting: "en pareja"|"con amigos"|"solo"|"en grupo"|"familiar"
 
 EVENTOS RECURRENTES vs FECHAS MÚLTIPLES ESPECÍFICAS — LEE ESTO CON CUIDADO:
 
@@ -237,7 +253,15 @@ FORMATO DE SALIDA (JSON estricto):
   "organizer": "@instagram o nombre del organizador o No especificado",
   "price": "Gratis, Q50, etc. o No especificado",
   "registration_url": "https://... o No especificado",
-  "event_type": "voluntariado|entretenimiento|general",
+  "category": "music|volunteer|general",
+  "subcategory": "rock-concert|... o null",
+  "tags": ["outdoor", "noche"],
+  "event_features": {
+    "mood": "energético|relajado|romántico|social|íntimo",
+    "vibe": "casual|formal|underground|familiar|exclusivo",
+    "timeOfDay": "mañana|tarde|noche|madrugada",
+    "socialSetting": "en pareja|con amigos|solo|en grupo|familiar"
+  },
   "is_recurring": true/false,
   "recurring_pattern": "descripción del patrón o null si no es recurrente",
   "recurring_days_of_week": ["viernes", "sábado"] o [] si no aplica,
@@ -336,7 +360,11 @@ FORMATO DE SALIDA (JSON estricto):
     if (!analysis.end_time) analysis.end_time = 'No especificado';
     if (!analysis.price) analysis.price = 'No especificado';
     if (!analysis.registration_url) analysis.registration_url = 'No especificado';
-    if (!analysis.event_type) analysis.event_type = 'general';
+    if (!analysis.category) analysis.category = analysis.event_type || 'general';
+    delete analysis.event_type;
+    if (!analysis.subcategory) analysis.subcategory = null;
+    if (!Array.isArray(analysis.tags)) analysis.tags = [];
+    if (!analysis.event_features || typeof analysis.event_features !== 'object') analysis.event_features = null;
     if (analysis.is_recurring === undefined) analysis.is_recurring = false;
     if (!analysis.recurring_pattern) analysis.recurring_pattern = null;
 
