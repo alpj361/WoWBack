@@ -400,6 +400,12 @@ FORMATO DE SALIDA (JSON estricto):
     const tokensUsed = response.usage?.total_tokens || 0;
 
     console.log(`[EVENT_VISION] ✅ Analysis completed - Confidence: ${analysis.confidence}, Tokens: ${tokensUsed}`);
+    console.log(`[EVENT_VISION] 📋 "${analysis.event_name}" | ${analysis.date} ${analysis.time || ''} | ${analysis.location || 'Sin ubicación'}`);
+    console.log(`[EVENT_VISION] 🏷️  category=${analysis.category} | subcategory=${analysis.subcategory ?? 'null'} | tags=${JSON.stringify(analysis.tags ?? [])}`);
+    console.log(`[EVENT_VISION] ✨ mood=${analysis.event_features?.mood ?? 'null'} | vibe=${analysis.event_features?.vibe ?? 'null'} | timeOfDay=${analysis.event_features?.timeOfDay ?? 'null'} | socialSetting=${analysis.event_features?.socialSetting ?? 'null'}`);
+    if (analysis.is_recurring) {
+      console.log(`[EVENT_VISION] 🔁 recurring=true | pattern="${analysis.recurring_pattern}" | dates=${JSON.stringify(analysis.recurring_dates)}`);
+    }
 
     return {
       analysis,

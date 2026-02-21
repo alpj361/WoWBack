@@ -2,6 +2,77 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.0.17] - 2026-02-15
+
+### Changed - Event Classification: category + subcategory + tags + event_features (`eventVision.js`)
+
+Reemplaza el campo `event_type` por un sistema de clasificación más rico y estructurado.
+
+#### Nuevo campo `category` (reemplaza `event_type`)
+| Valor | Descripción |
+|-------|-------------|
+| `music` | Concierto, festival, DJ, arte, teatro, cine, danza, exposición, karaoke |
+| `volunteer` | Limpieza, reforestación, donación, ayuda comunitaria, salud |
+| `general` | Conferencia, taller, feria, reunión, clase, deporte, mercado, networking |
+
+#### Nuevo campo `subcategory`
+- 80+ IDs precisos organizados por categoría (ej: `rock-concert`, `beach-cleanup`, `hackathon`)
+- `null` si no hay coincidencia clara
+
+#### Nuevo campo `tags` (array)
+- 1–4 tags contextuales por evento (ej: `["outdoor", "noche", "gratis"]`)
+- Lista distinta por categoría
+
+#### Nuevo campo `event_features` (objeto)
+```json
+{
+  "mood": "energético|relajado|romántico|social|íntimo",
+  "vibe": "casual|formal|underground|familiar|exclusivo",
+  "timeOfDay": "mañana|tarde|noche|madrugada",
+  "socialSetting": "en pareja|con amigos|solo|en grupo|familiar"
+}
+```
+
+#### Normalización
+- `category` hereda de `event_type` si está presente (compatibilidad hacia atrás)
+- `event_type` eliminado del output final (`delete analysis.event_type`)
+- `subcategory` → `null` si ausente; `tags` → `[]` si ausente; `event_features` → `null` si inválido
+
+---
+
+## [1.0.16] - 2026-02-15
+
+### Changed - Recurring Events: multi-day support + 7 casos de clasificación (`eventVision.js`)
+
+Refactoring mayor de la lógica de eventos recurrentes en el prompt y en el cálculo de fechas.
+
+#### `recurring_day_of_week` → `recurring_days_of_week` (array)
+- Soporta múltiples días simultáneos: `["viernes", "sábado"]`
+- Retrocompatible: acepta string o array en la respuesta del modelo
+
+#### 7 casos documentados en el prompt del modelo
+| Caso | Tipo | Ejemplo | `is_recurring` |
+|------|------|---------|---------------|
+| A | Fechas específicas | "viernes 13 y sábado 14" | `false` |
+| B | Recurrente por día | "todos los viernes de febrero" | `true` |
+| C | Rango continuo | "del 12 al 18 de febrero" | `true` |
+| D | Mensual | "cada primer sábado del mes" | `true` |
+| E | Evento anual | "Feria anual agosto 2026" | `false` |
+| F | Temporada/Tour | "gira febrero-abril" | `true` |
+| G | Fechas saltadas | "5, 19 y 26 de febrero" | `false` |
+
+#### Cálculo de fechas (Caso A — múltiples específicas)
+- Cuando `is_recurring: false` pero `recurring_specific_days` tiene >1 día, el servidor deriva las fechas exactas desde la fecha principal del evento
+- Las fechas se ordenan cronológicamente
+
+#### Corrección de orden de fechas
+- `dates.sort()` aplicado al resultado de `calculateRecurringDates` para garantizar orden cronológico
+
+#### Nuevo campo `event_type` en output (transitorio)
+- Añadido en este commit; reemplazado por `category` en v1.0.17
+
+---
+
 ## [1.0.15] - 2026-02-21
 
 ### Added - Image Storage Service (Supabase Storage)
