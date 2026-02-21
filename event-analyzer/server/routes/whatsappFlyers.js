@@ -371,6 +371,86 @@ router.get('/webhook', (req, res) => {
 });
 
 /**
+ * Submit an event flyer from the app (base64 image)
+ * POST /api/whatsapp/submit
+ */
+router.post('/submit', async (req, res) => {
+  try {
+    const { base64, sender_name, event_description } = req.body;
+
+    if (!base64) {
+      return res.status(400).json({ success: false, error: 'base64 image is required' });
+    }
+
+    // Parse data URI if present
+    let contentType = 'image/jpeg';
+    let rawBase64 = base64;
+    if (base64.startsWith('data:')) {
+      const match = base64.match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) {
+        return res.status(400).json({ success: false, error: 'Invalid base64 data URI' });
+      }
+      contentType = match[1];
+      rawBase64 = match[2];
+    }
+
+    const buffer = Buffer.from(rawBase64, 'base64');
+    const ext = contentType.split('/')[1]?.split(';')[0] || 'jpg';
+    const timestamp = new Date();
+    const dateFolder = timestamp.toISOString().split('T')[0];
+    const fileName = `${dateFolder}/app_${Date.now()}.${ext}`;
+
+    const supabase = getSupabase();
+
+    // Upload to whatsapp-flyers bucket
+    const { error: uploadError } = await supabase
+      .storage
+      .from('whatsapp-flyers')
+      .upload(fileName, buffer, { contentType, upsert: false });
+
+    if (uploadError) {
+      console.error('[FLYER_SUBMIT] ❌ Upload error:', uploadError.message);
+      throw new Error(`Upload failed: ${uploadError.message}`);
+    }
+
+    const { data: { publicUrl } } = supabase
+      .storage
+      .from('whatsapp-flyers')
+      .getPublicUrl(fileName);
+
+    // Insert into whatsapp_flyers table
+    const { data: dbData, error: dbError } = await supabase
+      .from('whatsapp_flyers')
+      .insert({
+        flyer: publicUrl,
+        status: 'pending',
+        saved: false,
+        sender_name: sender_name || null,
+        event_description: event_description || null,
+      })
+      .select()
+      .single();
+
+    if (dbError) {
+      console.error('[FLYER_SUBMIT] ❌ DB insert error:', dbError.message);
+      throw new Error(`Database insert failed: ${dbError.message}`);
+    }
+
+    console.log(`[FLYER_SUBMIT] ✅ Flyer submitted from app, id: ${dbData.id}`);
+
+    res.status(201).json({
+      success: true,
+      id: dbData.id,
+      message: 'Flyer received and queued for review',
+    });
+
+  } catch (error) {
+    console.error('[FLYER_SUBMIT] ❌ Error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * Get pending flyers
  * GET /api/whatsapp/flyers/pending
  */

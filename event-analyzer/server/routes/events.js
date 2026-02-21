@@ -17,7 +17,7 @@ router.post('/', async (req, res) => {
 
         const {
             title, description, category, image, date, time, end_time, location, organizer, user_id,
-            price, registration_form_url, bank_account_number, bank_name,
+            price, registration_form_url, reservation_contact, bank_account_number, bank_name,
             requires_attendance_check, is_recurring, recurring_dates, target_audience
         } = req.body;
 
@@ -55,6 +55,7 @@ router.post('/', async (req, res) => {
             user_id: user_id || null,
             price: price || null,
             registration_form_url: registration_form_url?.trim() || null,
+            reservation_contact: reservation_contact?.trim() || null,
             bank_account_number: bank_account_number?.trim() || null,
             bank_name: bank_name?.trim() || null,
             requires_attendance_check: requires_attendance_check || false,

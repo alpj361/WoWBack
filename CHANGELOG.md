@@ -2,6 +2,43 @@
 
 All notable changes to the WoW Backend will be documented in this file.
 
+## [1.0.15] - 2026-02-21
+
+### Added - Image Storage Service (Supabase Storage)
+
+#### New Route: `routes/imageStorage.js`
+- **POST /api/storage/upload-image-url** — Descarga una imagen desde una URL externa y la sube al bucket `event-images` de Supabase Storage. Retorna una URL pública permanente que nunca expira. Si se proporciona `event_id`, actualiza automáticamente el campo `image` del evento en la base de datos.
+- **POST /api/storage/upload-image-base64** — Sube una imagen en formato base64 (data URI o raw) directamente a Supabase Storage. Mismo comportamiento con `event_id` opcional.
+- **POST /api/storage/migrate-event-images** — Migración masiva: itera todos los eventos que aún tienen URLs externas (que no son de Supabase Storage), descarga y re-sube cada imagen, y actualiza el registro del evento. Acepta parámetro `limit` (default 50) para controlar el lote.
+
+#### Características
+- Crea el bucket `event-images` automáticamente si no existe (público, max 10 MB)
+- Archivos organizados bajo `events/{filename}.{ext}`
+- Delay de 300ms entre migraciones para respetar rate limits
+- Manejo de errores por imagen: si una falla, el proceso continúa con las demás
+
+#### Registro en `index.js`
+- Nueva ruta montada en `/api/storage`
+- Documentación del endpoint actualizada en la respuesta raíz `/`
+
+### Frontend (`frontend/src/services/api.ts`)
+- **`uploadImageFromUrl(url, eventId?, filename?)`** — Helper TypeScript para `POST /api/storage/upload-image-url`
+- **`uploadImageBase64(base64, eventId?, filename?)`** — Helper TypeScript para `POST /api/storage/upload-image-base64`
+- **`migrateEventImages(limit?)`** — Helper TypeScript para `POST /api/storage/migrate-event-images`
+- Interfaz `StorageUploadResult` exportada
+
+### Motivation
+Las URLs generadas por herramientas de extracción de Instagram/AI tienen TTL corto y expiran a las pocas horas. Esta solución persiste las imágenes en Supabase Storage para que sean permanentes.
+
+### Endpoints Summary
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/storage/upload-image-url` | Subir imagen desde URL externa |
+| POST | `/api/storage/upload-image-base64` | Subir imagen en base64 |
+| POST | `/api/storage/migrate-event-images` | Migración masiva de imágenes existentes |
+
+---
+
 ## [1.0.14] - 2026-02-11
 
 ### Added - Event Fields & Recurring Date Expiration
