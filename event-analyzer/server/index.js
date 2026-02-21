@@ -8,6 +8,7 @@ const authRoutes = require('./routes/auth');
 const urlExtractionRoutes = require('./routes/urlExtraction');
 const whatsappFlyersRoutes = require('./routes/whatsappFlyers');
 const extractionJobsRoutes = require('./routes/extractionJobs');
+const imageStorageRoutes = require('./routes/imageStorage');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -51,6 +52,7 @@ app.use('/api/events', imageAnalysisRoutes);
 app.use('/api/events', urlExtractionRoutes);
 app.use('/api/extraction-jobs', extractionJobsRoutes);
 app.use('/api/whatsapp', whatsappFlyersRoutes);
+app.use('/api/storage', imageStorageRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -66,7 +68,10 @@ app.get('/', (req, res) => {
       analyzeImage: 'POST /api/events/analyze-image',
       analyzeUrl: 'POST /api/events/analyze-url',
       processExtractionJob: 'POST /api/extraction-jobs/process/:id',
-      analyzeExtractionJob: 'POST /api/extraction-jobs/analyze/:id'
+      analyzeExtractionJob: 'POST /api/extraction-jobs/analyze/:id',
+      uploadImageUrl: 'POST /api/storage/upload-image-url',
+      uploadImageBase64: 'POST /api/storage/upload-image-base64',
+      migrateEventImages: 'POST /api/storage/migrate-event-images'
     }
   });
 });
